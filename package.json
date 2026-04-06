@@ -49,6 +49,10 @@
           "name": "Connections"
         },
         {
+          "id": "firestoreAuth",
+          "name": "Auth"
+        },
+        {
           "id": "firestoreSavedQueries",
           "name": "Saved Queries"
         }
@@ -109,6 +113,15 @@
         "command": "firestoreExplorer.runSavedQuery",
         "title": "Firestore: Run Query",
         "icon": "$(play)"
+      },
+      {
+        "command": "firestoreExplorer.openAuth",
+        "title": "Firestore: Open Auth Users"
+      },
+      {
+        "command": "firestoreExplorer.refreshAuth",
+        "title": "Firestore: Refresh Auth",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -126,6 +139,11 @@
         {
           "command": "firestoreExplorer.refreshConnections",
           "when": "view == firestoreConnections",
+          "group": "navigation"
+        },
+        {
+          "command": "firestoreExplorer.refreshAuth",
+          "when": "view == firestoreAuth",
           "group": "navigation"
         },
         {

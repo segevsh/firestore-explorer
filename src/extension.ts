@@ -11,6 +11,8 @@ import { SavedQueriesTreeProvider } from "./providers/savedQueriesTreeProvider";
 import { CollectionPanel } from "./panels/collectionPanel";
 import { QueryBuilderPanel } from "./panels/queryBuilderPanel";
 import { DocumentEditorPanel } from "./panels/documentEditorPanel";
+import { AuthPanel } from "./panels/authPanel";
+import { AuthTreeProvider } from "./providers/authTreeProvider";
 import { FirestoreFileSystemProvider } from "./providers/firestoreFileSystemProvider";
 import { runQuery } from "./services/queryRunner";
 import type { ConnectionConfig } from "./types";
@@ -46,9 +48,11 @@ export function activate(context: vscode.ExtensionContext) {
   // Tree providers
   const connectionTreeProvider = new ConnectionTreeProvider(connectionManager, resolveConnection);
   const savedQueriesProvider = new SavedQueriesTreeProvider(workspaceRoot, connectionManager);
+  const authTreeProvider = new AuthTreeProvider(connectionManager);
 
   vscode.window.registerTreeDataProvider("firestoreConnections", connectionTreeProvider);
   vscode.window.registerTreeDataProvider("firestoreSavedQueries", savedQueriesProvider);
+  vscode.window.registerTreeDataProvider("firestoreAuth", authTreeProvider);
 
   // Commands
   context.subscriptions.push(
@@ -96,6 +100,7 @@ export function activate(context: vscode.ExtensionContext) {
       connectionManager.register(resolveConnection(config));
       connectionTreeProvider.refresh();
       savedQueriesProvider.refresh();
+      authTreeProvider.refresh();
     }),
 
     vscode.commands.registerCommand("firestoreExplorer.connect", async (item: ConnectionTreeItem) => {
@@ -108,12 +113,14 @@ export function activate(context: vscode.ExtensionContext) {
       }
       connectionTreeProvider.refresh();
       savedQueriesProvider.refresh();
+      authTreeProvider.refresh();
     }),
 
     vscode.commands.registerCommand("firestoreExplorer.disconnect", async (item: ConnectionTreeItem) => {
       await connectionManager.disconnect(item.connectionState.config.name);
       connectionTreeProvider.refresh();
       savedQueriesProvider.refresh();
+      authTreeProvider.refresh();
     }),
 
     vscode.commands.registerCommand("firestoreExplorer.removeConnection", async (item: ConnectionTreeItem) => {
@@ -128,6 +135,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       connectionTreeProvider.refresh();
       savedQueriesProvider.refresh();
+      authTreeProvider.refresh();
     }),
 
     vscode.commands.registerCommand(
@@ -281,9 +289,18 @@ return db.collection("").limit(10).get();
       }
     }),
 
+    vscode.commands.registerCommand("firestoreExplorer.openAuth", (connectionName: string) => {
+      new AuthPanel(context, connectionManager, connectionName);
+    }),
+
+    vscode.commands.registerCommand("firestoreExplorer.refreshAuth", () => {
+      authTreeProvider.refresh();
+    }),
+
     vscode.commands.registerCommand("firestoreExplorer.refreshConnections", () => {
       connectionTreeProvider.refresh();
       savedQueriesProvider.refresh();
+      authTreeProvider.refresh();
     })
   );
 
