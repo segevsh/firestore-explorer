@@ -1,12 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { CollectionView } from "./components/CollectionView";
+import { AuthView } from "./components/AuthView";
 import { QueryBuilder } from "./components/QueryBuilder";
 import "./styles/index.css";
 
 declare global {
   interface Window {
-    __PANEL_TYPE__: "collection" | "document" | "queryBuilder";
+    __PANEL_TYPE__: "collection" | "document" | "queryBuilder" | "auth";
     __INITIAL_DATA__: Record<string, unknown>;
   }
 }
@@ -26,6 +27,8 @@ function App() {
     case "document":
       // Documents now open in VS Code's native JSON editor
       return <div>Document opened in editor</div>;
+    case "auth":
+      return <AuthView connectionName={data.connectionName as string} />;
     case "queryBuilder":
       return <QueryBuilder connectionName={data.connectionName as string} />;
     default:

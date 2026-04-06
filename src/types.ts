@@ -82,4 +82,6 @@ export type WebviewToHostMessage =
   | { type: "saveDocument"; connectionName: string; docPath: string; data: Record<string, unknown> }
   | { type: "runQuery"; connectionName: string; query: QueryDef }
   | { type: "openDocument"; connectionName: string; docPath: string }
-  | { type: "navigateSubCollection"; connectionName: string; collectionPath: string };
+  | { type: "navigateSubCollection"; connectionName: string; collectionPath: string }
+  | { type: "fetchUsers"; connectionName: string; limit: number; pageToken?: string }
+  | { type: "openUserDetail"; connectionName: string; uid: string };
