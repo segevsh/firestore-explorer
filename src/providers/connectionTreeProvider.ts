@@ -1,27 +1,21 @@
 import * as vscode from "vscode";
 import type { ConnectionManager } from "../services/connectionManager";
-import type { ConnectionState } from "../types";
+import type { ConnectionConfig, ConnectionState } from "../types";
 
 export class ConnectionTreeItem extends vscode.TreeItem {
   constructor(
     public readonly connectionState: ConnectionState,
   ) {
     const { status, config, error } = connectionState;
-    const isConnected = status === "connected";
-    super(
-      config.name,
-      // All states are expandable — connected shows collections, others show status info
-      vscode.TreeItemCollapsibleState.Collapsed
-    );
+    super(config.name, vscode.TreeItemCollapsibleState.Collapsed);
 
     this.contextValue = `connection-${status}`;
 
-    // Show type + host info and status
     const typeLabel = config.type === "emulator"
       ? `emulator · ${config.host}:${config.port}`
       : "production";
 
-    if (isConnected) {
+    if (status === "connected") {
       this.description = typeLabel;
       this.iconPath = new vscode.ThemeIcon("database");
     } else if (status === "error") {
@@ -65,9 +59,19 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<vscode.Tr
   private _onDidChangeTreeData = new vscode.EventEmitter<vscode.TreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  constructor(private connectionManager: ConnectionManager) {}
+  private collectionFilter = "";
+
+  constructor(
+    private connectionManager: ConnectionManager,
+    private resolveConnection: (config: ConnectionConfig) => ConnectionConfig
+  ) {}
 
   refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
+  }
+
+  setFilter(filter: string): void {
+    this.collectionFilter = filter.toLowerCase();
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -77,7 +81,6 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<vscode.Tr
 
   async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
     if (!element) {
-      // Root level: show connections
       const states = this.connectionManager.getAll();
       if (states.length === 0) {
         return [new InfoTreeItem("No connections configured", "info")];
@@ -87,11 +90,25 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<vscode.Tr
 
     if (element instanceof ConnectionTreeItem) {
       const { connectionState } = element;
-      if (connectionState.status !== "connected") {
-        if (connectionState.status === "error") {
-          return [new InfoTreeItem(`Error: ${connectionState.error ?? "unknown"}`, "warning")];
+
+      // Auto-connect on expand if not yet connected
+      if (connectionState.status === "disconnected") {
+        try {
+          await this.connectionManager.connect(
+            this.resolveConnection(connectionState.config)
+          );
+          // Refresh the whole tree so icon/description update
+          this.refresh();
+          return [new InfoTreeItem("Connecting…", "sync~spin")];
+        } catch (err) {
+          this.refresh();
+          const message = err instanceof Error ? err.message : String(err);
+          return [new InfoTreeItem(`Connection failed: ${message}`, "error")];
         }
-        return [new InfoTreeItem("Not connected — click to connect", "plug")];
+      }
+
+      if (connectionState.status === "error") {
+        return [new InfoTreeItem(`Error: ${connectionState.error ?? "unknown"}`, "warning")];
       }
 
       try {
@@ -100,7 +117,8 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<vscode.Tr
         if (collections.length === 0) {
           return [new InfoTreeItem("No collections found", "info")];
         }
-        return collections.map(
+
+        let items = collections.map(
           (col) =>
             new CollectionTreeItem(
               col.id,
@@ -108,6 +126,18 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<vscode.Tr
               col.id
             )
         );
+
+        // Apply search filter
+        if (this.collectionFilter) {
+          items = items.filter((item) =>
+            item.collectionName.toLowerCase().includes(this.collectionFilter)
+          );
+          if (items.length === 0) {
+            return [new InfoTreeItem(`No collections matching "${this.collectionFilter}"`, "search")];
+          }
+        }
+
+        return items;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return [new InfoTreeItem(`Failed to list: ${message}`, "error")];

@@ -84,6 +84,31 @@
         "command": "firestoreExplorer.refreshConnections",
         "title": "Firestore: Refresh Connections",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "firestoreExplorer.searchCollections",
+        "title": "Firestore: Search Collections",
+        "icon": "$(search)"
+      },
+      {
+        "command": "firestoreExplorer.clearSearch",
+        "title": "Firestore: Clear Search",
+        "icon": "$(close)"
+      },
+      {
+        "command": "firestoreExplorer.createQueryFolder",
+        "title": "Firestore: New Query Folder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "firestoreExplorer.createQueryFile",
+        "title": "Firestore: New Query",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "firestoreExplorer.runSavedQuery",
+        "title": "Firestore: Run Query",
+        "icon": "$(play)"
       }
     ],
     "menus": {
@@ -94,8 +119,28 @@
           "group": "navigation"
         },
         {
+          "command": "firestoreExplorer.searchCollections",
+          "when": "view == firestoreConnections",
+          "group": "navigation"
+        },
+        {
           "command": "firestoreExplorer.refreshConnections",
           "when": "view == firestoreConnections",
+          "group": "navigation"
+        },
+        {
+          "command": "firestoreExplorer.createQueryFile",
+          "when": "view == firestoreSavedQueries",
+          "group": "navigation"
+        },
+        {
+          "command": "firestoreExplorer.createQueryFolder",
+          "when": "view == firestoreSavedQueries",
+          "group": "navigation"
+        },
+        {
+          "command": "firestoreExplorer.refreshConnections",
+          "when": "view == firestoreSavedQueries",
           "group": "navigation"
         }
       ],
@@ -115,6 +160,19 @@
         {
           "command": "firestoreExplorer.openCollection",
           "when": "viewItem == collection"
+        },
+        {
+          "command": "firestoreExplorer.createQueryFolder",
+          "when": "viewItem == queryServer || viewItem == queryFolder"
+        },
+        {
+          "command": "firestoreExplorer.createQueryFile",
+          "when": "viewItem == queryServer || viewItem == queryFolder"
+        },
+        {
+          "command": "firestoreExplorer.runSavedQuery",
+          "when": "viewItem == savedQuery",
+          "group": "inline"
         }
       ]
     },

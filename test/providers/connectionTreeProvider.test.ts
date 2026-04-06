@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConnectionTreeProvider, ConnectionTreeItem } from "../../src/providers/connectionTreeProvider";
 import { ConnectionManager } from "../../src/services/connectionManager";
-import type { ConnectionState } from "../../src/types";
+import type { ConnectionConfig, ConnectionState } from "../../src/types";
 
 // Mock vscode module
 vi.mock("vscode", () => ({
@@ -12,6 +12,7 @@ vi.mock("vscode", () => ({
     description?: string;
     iconPath?: unknown;
     command?: unknown;
+    tooltip?: string;
     constructor(label: string, collapsibleState: number) {
       this.label = label;
       this.collapsibleState = collapsibleState;
@@ -19,6 +20,11 @@ vi.mock("vscode", () => ({
   },
   TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
   ThemeIcon: class {
+    id: string;
+    color?: unknown;
+    constructor(id: string, color?: unknown) { this.id = id; this.color = color; }
+  },
+  ThemeColor: class {
     id: string;
     constructor(id: string) { this.id = id; }
   },
@@ -28,6 +34,8 @@ vi.mock("vscode", () => ({
   },
 }));
 
+const identity = (c: ConnectionConfig) => c;
+
 describe("ConnectionTreeProvider", () => {
   let provider: ConnectionTreeProvider;
   let mockManager: Partial<ConnectionManager>;
@@ -36,13 +44,15 @@ describe("ConnectionTreeProvider", () => {
     mockManager = {
       getAll: vi.fn().mockReturnValue([]),
       getFirestore: vi.fn(),
+      connect: vi.fn().mockResolvedValue(undefined),
     };
-    provider = new ConnectionTreeProvider(mockManager as ConnectionManager);
+    provider = new ConnectionTreeProvider(mockManager as ConnectionManager, identity);
   });
 
-  it("returns empty array when no connections", async () => {
+  it("returns info item when no connections", async () => {
     const children = await provider.getChildren();
-    expect(children).toEqual([]);
+    expect(children).toHaveLength(1);
+    expect(children[0].label).toBe("No connections configured");
   });
 
   it("returns connection nodes at root level", async () => {
@@ -58,14 +68,14 @@ describe("ConnectionTreeProvider", () => {
     expect(children[1].label).toBe("prod");
   });
 
-  it("shows connection status in description", async () => {
+  it("shows connection type and status in description", async () => {
     const states: ConnectionState[] = [
       { config: { name: "local", type: "emulator", host: "localhost", port: 8080 }, status: "connected" },
     ];
     (mockManager.getAll as any).mockReturnValue(states);
 
     const children = await provider.getChildren();
-    expect(children[0].description).toBe("localhost:8080");
+    expect(children[0].description).toBe("emulator · localhost:8080");
     expect(children[0].contextValue).toBe("connection-connected");
   });
 
@@ -82,5 +92,22 @@ describe("ConnectionTreeProvider", () => {
     expect(children).toHaveLength(2);
     expect(children[0].label).toBe("users");
     expect(children[1].label).toBe("orders");
+  });
+
+  it("filters collections when search is active", async () => {
+    const mockFirestore = {
+      listCollections: vi.fn().mockResolvedValue([{ id: "users" }, { id: "orders" }, { id: "userProfiles" }]),
+    };
+    (mockManager.getFirestore as any).mockReturnValue(mockFirestore);
+
+    provider.setFilter("user");
+
+    const connectionItem = new ConnectionTreeItem(
+      { config: { name: "local", type: "emulator", host: "localhost", port: 8080 }, status: "connected" },
+    );
+    const children = await provider.getChildren(connectionItem);
+    expect(children).toHaveLength(2);
+    expect(children[0].label).toBe("users");
+    expect(children[1].label).toBe("userProfiles");
   });
 });

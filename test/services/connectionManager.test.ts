@@ -6,6 +6,7 @@ import type { ConnectionConfig } from "../../src/types";
 vi.mock("firebase-admin", () => {
   const mockFirestore = {
     listCollections: vi.fn().mockResolvedValue([]),
+    settings: vi.fn(),
   };
   const mockApp = {
     firestore: vi.fn().mockReturnValue(mockFirestore),
