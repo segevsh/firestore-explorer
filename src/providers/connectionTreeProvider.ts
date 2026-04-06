@@ -6,25 +6,32 @@ export class ConnectionTreeItem extends vscode.TreeItem {
   constructor(
     public readonly connectionState: ConnectionState,
   ) {
-    const isConnected = connectionState.status === "connected";
+    const { status, config, error } = connectionState;
+    const isConnected = status === "connected";
     super(
-      connectionState.config.name,
-      isConnected
-        ? vscode.TreeItemCollapsibleState.Collapsed
-        : vscode.TreeItemCollapsibleState.None
+      config.name,
+      // All states are expandable — connected shows collections, others show status info
+      vscode.TreeItemCollapsibleState.Collapsed
     );
 
-    this.contextValue = `connection-${connectionState.status}`;
+    this.contextValue = `connection-${status}`;
 
-    if (connectionState.config.type === "emulator") {
-      this.description = `${connectionState.config.host}:${connectionState.config.port}`;
+    // Show type + host info and status
+    const typeLabel = config.type === "emulator"
+      ? `emulator · ${config.host}:${config.port}`
+      : "production";
+
+    if (isConnected) {
+      this.description = typeLabel;
+      this.iconPath = new vscode.ThemeIcon("database");
+    } else if (status === "error") {
+      this.description = `${typeLabel} · ⚠ error`;
+      this.tooltip = error ?? "Connection failed";
+      this.iconPath = new vscode.ThemeIcon("error", new vscode.ThemeColor("errorForeground"));
     } else {
-      this.description = connectionState.status;
+      this.description = `${typeLabel} · disconnected`;
+      this.iconPath = new vscode.ThemeIcon("debug-disconnect");
     }
-
-    this.iconPath = new vscode.ThemeIcon(
-      isConnected ? "database" : "debug-disconnect"
-    );
   }
 }
 
@@ -45,6 +52,15 @@ export class CollectionTreeItem extends vscode.TreeItem {
   }
 }
 
+class InfoTreeItem extends vscode.TreeItem {
+  constructor(label: string, icon?: string) {
+    super(label, vscode.TreeItemCollapsibleState.None);
+    if (icon) {
+      this.iconPath = new vscode.ThemeIcon(icon);
+    }
+  }
+}
+
 export class ConnectionTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<vscode.TreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -62,20 +78,28 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<vscode.Tr
   async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
     if (!element) {
       // Root level: show connections
-      return this.connectionManager
-        .getAll()
-        .map((state) => new ConnectionTreeItem(state));
+      const states = this.connectionManager.getAll();
+      if (states.length === 0) {
+        return [new InfoTreeItem("No connections configured", "info")];
+      }
+      return states.map((state) => new ConnectionTreeItem(state));
     }
 
     if (element instanceof ConnectionTreeItem) {
       const { connectionState } = element;
       if (connectionState.status !== "connected") {
-        return [];
+        if (connectionState.status === "error") {
+          return [new InfoTreeItem(`Error: ${connectionState.error ?? "unknown"}`, "warning")];
+        }
+        return [new InfoTreeItem("Not connected — click to connect", "plug")];
       }
 
       try {
         const db = this.connectionManager.getFirestore(connectionState.config.name);
         const collections = await db.listCollections();
+        if (collections.length === 0) {
+          return [new InfoTreeItem("No collections found", "info")];
+        }
         return collections.map(
           (col) =>
             new CollectionTreeItem(
@@ -84,8 +108,9 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<vscode.Tr
               col.id
             )
         );
-      } catch {
-        return [];
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return [new InfoTreeItem(`Failed to list: ${message}`, "error")];
       }
     }
 

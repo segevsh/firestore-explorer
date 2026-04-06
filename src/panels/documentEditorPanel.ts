@@ -32,7 +32,7 @@ export class DocumentEditorPanel {
       await vscode.languages.setTextDocumentLanguage(textDoc, "json");
 
       // Show metadata panel beside the editor
-      this.showMetadata(doc, vscode.ViewColumn.Two);
+      this.showMetadata(connectionName, doc, vscode.ViewColumn.Two);
 
       // Listen for save (Cmd+S / Ctrl+S) on this document
       this.saveListener = vscode.workspace.onDidSaveTextDocument(async (saved) => {
@@ -65,7 +65,7 @@ export class DocumentEditorPanel {
     }
   }
 
-  private showMetadata(doc: FirestoreDoc, viewColumn: vscode.ViewColumn) {
+  private showMetadata(connectionName: string, doc: FirestoreDoc, viewColumn: vscode.ViewColumn) {
     const docId = doc.path.split("/").pop() ?? doc.id;
 
     this.metadataPanel = vscode.window.createWebviewPanel(
@@ -75,13 +75,14 @@ export class DocumentEditorPanel {
       { enableScripts: false }
     );
 
-    this.metadataPanel.webview.html = this.getMetadataHtml(doc);
+    this.metadataPanel.webview.html = this.getMetadataHtml(connectionName, doc);
   }
 
-  private getMetadataHtml(doc: FirestoreDoc): string {
+  private getMetadataHtml(connectionName: string, doc: FirestoreDoc): string {
     const fieldCount = Object.keys(doc.data).length;
 
     const rows: [string, string][] = [
+      ["Connection", connectionName],
       ["Document ID", doc.id],
       ["Full Path", doc.path],
       ["Collection", doc.path.split("/").slice(0, -1).join("/")],

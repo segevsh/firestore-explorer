@@ -38,6 +38,14 @@ export function TableView({
     return String(value);
   }
 
+  function cellTooltip(value: unknown): string | undefined {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === "object") return JSON.stringify(value, null, 2);
+    const str = String(value);
+    // Only show tooltip if content is long enough to be truncated
+    return str.length > 30 ? str : undefined;
+  }
+
   const selectCell = useCallback((row: number, col: number) => {
     setSelectedRow(row);
     setSelectedCol(col);
@@ -203,6 +211,7 @@ export function TableView({
               <tr key={doc.id}>
                 <td
                   className={`doc-id${isSelected(rowIdx, 0) ? " cell-selected" : ""}`}
+                  title={doc.path}
                   onClick={() => { handleCellClick(rowIdx, 0); onEditDocument(doc.path); }}
                   aria-selected={isSelected(rowIdx, 0)}
                   role="gridcell"
@@ -212,7 +221,7 @@ export function TableView({
                 {visibleColumns.map((col, colIdx) => (
                   <td
                     key={col}
-                    title={JSON.stringify(doc.data[col])}
+                    title={cellTooltip(doc.data[col])}
                     className={isSelected(rowIdx, colIdx + 1) ? "cell-selected" : undefined}
                     onClick={() => handleCellClick(rowIdx, colIdx + 1)}
                     aria-selected={isSelected(rowIdx, colIdx + 1)}

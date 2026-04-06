@@ -177,7 +177,20 @@ export function CollectionView({ connectionName, initialCollectionPath }: Collec
           </div>
         ) : error ? (
           <div className="error-state">
+            <div className="error-icon">⚠</div>
             <div className="error-text">Failed to load: {error}</div>
+            <div className="error-connection">Connection: <strong>{connectionName}</strong></div>
+            <button className="error-retry-btn" onClick={() => {
+              setLoading(true);
+              setError(null);
+              postMessage({ type: "fetchDocuments", connectionName, collectionPath, limit });
+            }}>Retry</button>
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📭</div>
+            <div className="empty-text">No documents in this collection</div>
+            <div className="empty-connection">Connection: <strong>{connectionName}</strong> · Collection: <strong>{collectionPath}</strong></div>
           </div>
         ) : viewMode === "table" ? (
           <TableView
@@ -210,6 +223,8 @@ export function CollectionView({ connectionName, initialCollectionPath }: Collec
       )}
 
       <div className="status-bar">
+        <span className="status-connection">{connectionName}</span>
+        {" · "}
         {loading
           ? "Loading…"
           : `${documents.length} document${documents.length !== 1 ? "s" : ""} loaded`}

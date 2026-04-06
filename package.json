@@ -102,7 +102,7 @@
       "view/item/context": [
         {
           "command": "firestoreExplorer.connect",
-          "when": "viewItem == connection-disconnected"
+          "when": "viewItem == connection-disconnected || viewItem == connection-error"
         },
         {
           "command": "firestoreExplorer.disconnect",
