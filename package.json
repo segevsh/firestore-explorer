@@ -1,8 +1,8 @@
 {
-  "name": "firestore-explorer",
-  "displayName": "Firestore Explorer",
+  "name": "firestore-workbench",
+  "displayName": "Firestore Workbench",
   "description": "Manage and explore Firestore databases from VS Code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "productivehub",
   "license": "MIT",
   "author": "ProductiveHub",

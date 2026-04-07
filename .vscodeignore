@@ -26,4 +26,5 @@ firestore-explorer.vsix
 dist/**/*.map
 webview/dist/**/*.map
 **/*.ts
+.env
 
