@@ -5,6 +5,7 @@
       "type": "emulator",
       "host": "localhost",
       "port": 9030,
+      "authPort": 9039,
       "projectId": "guestwho-7e1f2y"
     },
     {
