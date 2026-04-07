@@ -39,6 +39,27 @@ export class AuthService {
     return this.toAuthUser(record);
   }
 
+  async searchUser(query: string): Promise<AuthUser> {
+    // Try UID first, then email, then phone
+    const trimmed = query.trim();
+
+    // Email pattern
+    if (trimmed.includes("@")) {
+      const record = await this.authInstance.getUserByEmail(trimmed);
+      return this.toAuthUser(record);
+    }
+
+    // Phone pattern (starts with +)
+    if (trimmed.startsWith("+")) {
+      const record = await this.authInstance.getUserByPhoneNumber(trimmed);
+      return this.toAuthUser(record);
+    }
+
+    // Default: try as UID
+    const record = await this.authInstance.getUser(trimmed);
+    return this.toAuthUser(record);
+  }
+
   private toAuthUser(record: auth.UserRecord): AuthUser {
     return {
       uid: record.uid,

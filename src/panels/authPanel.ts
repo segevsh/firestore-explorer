@@ -46,11 +46,11 @@ export class AuthPanel {
           });
           break;
         }
-        case "fetchUser": {
+        case "searchUser": {
           const app = this.connectionManager.getApp(msg.connectionName);
           const svc = new AuthService(app.auth());
-          const user = await svc.getUser(msg.uid);
-          this.panel.webview.postMessage({ type: "loadUser", user });
+          const user = await svc.searchUser(msg.query);
+          this.panel.webview.postMessage({ type: "searchResult", users: [user] });
           break;
         }
         case "openUserDetail": {

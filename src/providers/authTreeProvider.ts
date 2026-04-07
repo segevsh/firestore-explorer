@@ -14,20 +14,16 @@ class AuthConnectionItem extends vscode.TreeItem {
       ? `emulator · ${connectionConfig.host}:${connectionConfig.port}`
       : "production";
 
-    if (connected) {
-      this.description = typeLabel;
-      this.iconPath = new vscode.ThemeIcon("person");
-      this.contextValue = "authConnection-connected";
-      this.command = {
-        command: "firestoreExplorer.openAuth",
-        title: "Open Auth",
-        arguments: [connectionName],
-      };
-    } else {
-      this.description = `${typeLabel} · disconnected`;
-      this.iconPath = new vscode.ThemeIcon("debug-disconnect");
-      this.contextValue = "authConnection-disconnected";
-    }
+    this.description = connected ? typeLabel : `${typeLabel} · disconnected`;
+    this.iconPath = new vscode.ThemeIcon(connected ? "person" : "debug-disconnect");
+    this.contextValue = connected ? "authConnection-connected" : "authConnection-disconnected";
+
+    // Always open auth panel on click — panel handles connection errors
+    this.command = {
+      command: "firestoreExplorer.openAuth",
+      title: "Open Auth",
+      arguments: [connectionName],
+    };
   }
 }
 

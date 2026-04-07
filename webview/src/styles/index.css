@@ -638,3 +638,14 @@ td.cell-selected {
   border-top: 1px solid var(--vscode-widget-border);
   padding-top: 8px;
 }
+
+/* Auth */
+.auth-search-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--vscode-widget-border);
+}
+.auth-search-input {
+  flex: 1;
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { useVsCodeMessages } from "../hooks/useVsCodeMessages";
 import type { AuthUser } from "./authTypes";
 
@@ -9,11 +9,12 @@ interface AuthViewProps {
 export function AuthView({ connectionName }: AuthViewProps) {
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [viewMode, setViewMode] = useState<"table" | "json">("table");
-  const [limit, setLimit] = useState(100);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pageToken, setPageToken] = useState<string | undefined>();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
 
   const onMessage = useCallback((msg: any) => {
     switch (msg.type) {
@@ -27,12 +28,22 @@ export function AuthView({ connectionName }: AuthViewProps) {
         setLoading(false);
         setLoadingMore(false);
         setError(null);
+        setHasSearched(true);
+        break;
+      }
+      case "searchResult": {
+        setUsers(msg.users);
+        setPageToken(undefined);
+        setLoading(false);
+        setError(null);
+        setHasSearched(true);
         break;
       }
       case "error": {
         setLoading(false);
         setLoadingMore(false);
         setError(msg.message);
+        setHasSearched(true);
         break;
       }
     }
@@ -40,57 +51,79 @@ export function AuthView({ connectionName }: AuthViewProps) {
 
   const { postMessage } = useVsCodeMessages(onMessage);
 
-  useEffect(() => {
-    setUsers([]);
+  function handleSearch() {
+    const q = searchQuery.trim();
+    if (!q) {
+      // Empty search = list all users
+      setLoading(true);
+      setError(null);
+      postMessage({ type: "fetchUsers", connectionName, limit: 100 });
+      return;
+    }
     setLoading(true);
     setError(null);
-    postMessage({ type: "fetchUsers", connectionName, limit });
-  }, [connectionName, limit, postMessage]);
+    postMessage({ type: "searchUser", connectionName, query: q });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  }
 
   function handleLoadMore() {
     if (!pageToken) return;
     setLoadingMore(true);
-    postMessage({ type: "fetchUsers", connectionName, limit, pageToken });
+    postMessage({ type: "fetchUsers", connectionName, limit: 100, pageToken });
   }
 
   function handleOpenUser(uid: string) {
     postMessage({ type: "openUserDetail", connectionName, uid });
   }
 
-  const columns = ["uid", "email", "displayName", "disabled", "emailVerified"];
-
   return (
     <div className="collection-view">
-      <div className="collection-toolbar">
-        <label>
-          Limit:
-          <input
-            type="number"
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value) || 100)}
-            min={1}
-            max={1000}
-            className="limit-input"
-          />
-        </label>
-        <div className="view-toggle">
-          <button
-            className={viewMode === "table" ? "active" : ""}
-            onClick={() => setViewMode("table")}
-          >
-            Table
-          </button>
-          <button
-            className={viewMode === "json" ? "active" : ""}
-            onClick={() => setViewMode("json")}
-          >
-            JSON
-          </button>
-        </div>
+      <div className="auth-search-bar">
+        <input
+          type="text"
+          className="auth-search-input"
+          placeholder="Search by email, phone (+...), or UID — leave empty to list all"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <button onClick={handleSearch} disabled={loading}>
+          {loading ? "Searching…" : "Search"}
+        </button>
       </div>
 
+      {hasSearched && !loading && !error && users.length > 0 && (
+        <div className="collection-toolbar">
+          <div className="view-toggle">
+            <button
+              className={viewMode === "table" ? "active" : ""}
+              onClick={() => setViewMode("table")}
+            >
+              Table
+            </button>
+            <button
+              className={viewMode === "json" ? "active" : ""}
+              onClick={() => setViewMode("json")}
+            >
+              JSON
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="collection-content">
-        {loading ? (
+        {!hasSearched && !loading ? (
+          <div className="empty-state">
+            <div className="empty-icon">🔍</div>
+            <div className="empty-text">Search for users or leave empty to list all</div>
+            <div className="empty-connection">Connection: <strong>{connectionName}</strong></div>
+          </div>
+        ) : loading ? (
           <div className="loading-state">
             <div className="spinner" />
             <div className="loading-text">Loading users…</div>
@@ -98,28 +131,26 @@ export function AuthView({ connectionName }: AuthViewProps) {
         ) : error ? (
           <div className="error-state">
             <div className="error-icon">⚠</div>
-            <div className="error-text">Failed to load: {error}</div>
+            <div className="error-text">{error}</div>
             <div className="error-connection">Connection: <strong>{connectionName}</strong></div>
-            <button className="error-retry-btn" onClick={() => {
-              setLoading(true);
-              setError(null);
-              postMessage({ type: "fetchUsers", connectionName, limit });
-            }}>Retry</button>
+            <button className="error-retry-btn" onClick={handleSearch}>Retry</button>
           </div>
         ) : users.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">👤</div>
             <div className="empty-text">No users found</div>
-            <div className="empty-connection">Connection: <strong>{connectionName}</strong></div>
           </div>
         ) : viewMode === "table" ? (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
-                  {columns.map((col) => (
-                    <th key={col}>{col}</th>
-                  ))}
+                  <th>UID</th>
+                  <th>Email</th>
+                  <th>Display Name</th>
+                  <th>Phone</th>
+                  <th>Disabled</th>
+                  <th>Verified</th>
                   <th>Created</th>
                   <th>Last Sign In</th>
                 </tr>
@@ -136,6 +167,7 @@ export function AuthView({ connectionName }: AuthViewProps) {
                     </td>
                     <td title={user.email}>{user.email ?? "—"}</td>
                     <td title={user.displayName}>{user.displayName ?? "—"}</td>
+                    <td title={user.phoneNumber}>{user.phoneNumber ?? "—"}</td>
                     <td>{user.disabled ? "Yes" : "No"}</td>
                     <td>{user.emailVerified ? "Yes" : "No"}</td>
                     <td>{user.metadata?.creationTime ?? "—"}</td>
@@ -168,10 +200,7 @@ export function AuthView({ connectionName }: AuthViewProps) {
 
       <div className="status-bar">
         <span className="status-connection">{connectionName}</span>
-        {" · "}
-        {loading
-          ? "Loading…"
-          : `${users.length} user${users.length !== 1 ? "s" : ""} loaded`}
+        {hasSearched && !loading && ` · ${users.length} user${users.length !== 1 ? "s" : ""}`}
       </div>
     </div>
   );
