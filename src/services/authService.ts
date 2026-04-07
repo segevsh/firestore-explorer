@@ -28,10 +28,15 @@ export class AuthService {
 
   async listUsers(maxResults = 100, pageToken?: string): Promise<AuthListResult> {
     const result = await this.authInstance.listUsers(maxResults, pageToken);
-    return {
-      users: result.users.map((u) => this.toAuthUser(u)),
-      pageToken: result.pageToken,
-    };
+    const users = result.users
+      .map((u) => this.toAuthUser(u))
+      .sort((a, b) => {
+        // Sort by last sign-in time, most recent first
+        const aTime = a.metadata.lastSignInTime ? new Date(a.metadata.lastSignInTime).getTime() : 0;
+        const bTime = b.metadata.lastSignInTime ? new Date(b.metadata.lastSignInTime).getTime() : 0;
+        return bTime - aTime;
+      });
+    return { users, pageToken: result.pageToken };
   }
 
   async getUser(uid: string): Promise<AuthUser> {

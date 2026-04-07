@@ -219,7 +219,11 @@
               },
               "port": {
                 "type": "number",
-                "description": "Emulator port (e.g. 8080)"
+                "description": "Firestore emulator port (e.g. 8080)"
+              },
+              "authPort": {
+                "type": "number",
+                "description": "Auth emulator port (default: 9099)"
               },
               "serviceAccountPath": {
                 "type": "string",

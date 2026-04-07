@@ -4,6 +4,8 @@ export interface EmulatorConnection {
   host: string;
   port: number;
   projectId?: string;
+  /** Auth emulator port (default: 9099) */
+  authPort?: number;
 }
 
 export interface ProductionConnection {

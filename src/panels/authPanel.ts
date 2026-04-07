@@ -36,8 +36,8 @@ export class AuthPanel {
     try {
       switch (msg.type) {
         case "fetchUsers": {
-          const app = this.connectionManager.getApp(msg.connectionName);
-          const svc = new AuthService(app.auth());
+          const auth = this.connectionManager.getAuth(msg.connectionName);
+          const svc = new AuthService(auth);
           const result = await svc.listUsers(msg.limit, msg.pageToken);
           this.panel.webview.postMessage({
             type: "loadUsers",
@@ -47,8 +47,8 @@ export class AuthPanel {
           break;
         }
         case "searchUser": {
-          const app = this.connectionManager.getApp(msg.connectionName);
-          const svc = new AuthService(app.auth());
+          const auth = this.connectionManager.getAuth(msg.connectionName);
+          const svc = new AuthService(auth);
           const user = await svc.searchUser(msg.query);
           this.panel.webview.postMessage({ type: "searchResult", users: [user] });
           break;
@@ -122,8 +122,8 @@ class AuthUserPanel {
 
   private async loadUser(connectionManager: ConnectionManager, connectionName: string, uid: string) {
     try {
-      const app = connectionManager.getApp(connectionName);
-      const svc = new AuthService(app.auth());
+      const auth = connectionManager.getAuth(connectionName);
+      const svc = new AuthService(auth);
       const user = await svc.getUser(uid);
       this.panel.webview.html = this.getUserHtml(connectionName, user);
     } catch (err) {
@@ -172,13 +172,6 @@ class AuthUserPanel {
       });
     }
 
-    if (user.customClaims && Object.keys(user.customClaims).length > 0) {
-      sections.push({
-        title: "Custom Claims",
-        rows: Object.entries(user.customClaims).map(([k, v]) => [k, JSON.stringify(v)]),
-      });
-    }
-
     const sectionsHtml = sections
       .map(
         (s) => `
@@ -186,6 +179,13 @@ class AuthUserPanel {
         <table>${s.rows.map(([label, value]) => `<tr><td class="label">${escapeHtml(label)}</td><td class="value">${escapeHtml(value)}</td></tr>`).join("")}</table>`
       )
       .join("");
+
+    let claimsHtml = "";
+    if (user.customClaims && Object.keys(user.customClaims).length > 0) {
+      claimsHtml = `
+        <h3>Custom Claims</h3>
+        <pre class="claims-json">${escapeHtml(JSON.stringify(user.customClaims, null, 2))}</pre>`;
+    }
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -218,12 +218,22 @@ class AuthUserPanel {
     td { padding: 5px 8px; vertical-align: top; }
     .label { font-weight: 600; white-space: nowrap; width: 150px; color: var(--vscode-descriptionForeground); }
     .value { font-family: var(--vscode-editor-font-family); word-break: break-all; }
+    .claims-json {
+      background: var(--vscode-textCodeBlock-background);
+      padding: 8px 12px;
+      border-radius: 3px;
+      font-family: var(--vscode-editor-font-family);
+      font-size: var(--vscode-editor-font-size);
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
   </style>
 </head>
 <body>
   <h2>${escapeHtml(user.displayName || user.email || user.uid)}</h2>
   <div class="connection-badge">Connection: ${escapeHtml(connectionName)}</div>
   ${sectionsHtml}
+  ${claimsHtml}
 </body>
 </html>`;
   }
