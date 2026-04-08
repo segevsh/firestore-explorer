@@ -1,7 +1,18 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import type { ConnectionManager } from "../services/connectionManager";
-import { AuthService } from "../services/authService";
+import { AuthService, EmulatorAuthService } from "../services/authService";
+import type { AuthListResult, AuthUser } from "../services/authService";
+
+/** Create the right auth service based on connection type. */
+function getAuthService(connectionManager: ConnectionManager, connectionName: string): AuthService | EmulatorAuthService {
+  const config = connectionManager.getConfig(connectionName);
+  if (config.type === "emulator") {
+    const projectId = config.projectId ?? `emulator-${config.name}`;
+    return new EmulatorAuthService(config.host, config.authPort ?? 9099, projectId);
+  }
+  return new AuthService(connectionManager.getAuth(connectionName));
+}
 
 export class AuthPanel {
   private panel: vscode.WebviewPanel;
@@ -36,8 +47,7 @@ export class AuthPanel {
     try {
       switch (msg.type) {
         case "fetchUsers": {
-          const auth = this.connectionManager.getAuth(msg.connectionName);
-          const svc = new AuthService(auth);
+          const svc = getAuthService(this.connectionManager, msg.connectionName);
           const result = await svc.listUsers(msg.limit, msg.pageToken);
           this.panel.webview.postMessage({
             type: "loadUsers",
@@ -47,14 +57,12 @@ export class AuthPanel {
           break;
         }
         case "searchUser": {
-          const auth = this.connectionManager.getAuth(msg.connectionName);
-          const svc = new AuthService(auth);
+          const svc = getAuthService(this.connectionManager, msg.connectionName);
           const user = await svc.searchUser(msg.query);
           this.panel.webview.postMessage({ type: "searchResult", users: [user] });
           break;
         }
         case "openUserDetail": {
-          // Open user profile in a new tab
           new AuthUserPanel(
             this.context,
             this.connectionManager,
@@ -122,8 +130,7 @@ class AuthUserPanel {
 
   private async loadUser(connectionManager: ConnectionManager, connectionName: string, uid: string) {
     try {
-      const auth = connectionManager.getAuth(connectionName);
-      const svc = new AuthService(auth);
+      const svc = getAuthService(connectionManager, connectionName);
       const user = await svc.getUser(uid);
       this.panel.webview.html = this.getUserHtml(connectionName, user);
     } catch (err) {

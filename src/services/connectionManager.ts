@@ -5,8 +5,6 @@ export class ConnectionManager {
   private states: Map<string, ConnectionState> = new Map();
   private apps: Map<string, admin.app.App> = new Map();
   private firestoreInstances: Map<string, admin.firestore.Firestore> = new Map();
-  /** Emulator auth host strings keyed by connection name, e.g. "localhost:9099" */
-  private emulatorAuthHosts: Map<string, string> = new Map();
 
   getAll(): ConnectionState[] {
     return Array.from(this.states.values());
@@ -29,27 +27,11 @@ export class ConnectionManager {
       await this.disconnect(config.name);
     }
 
-    // Clear emulator env vars — we manage them per-call
-    delete process.env["FIRESTORE_EMULATOR_HOST"];
-    delete process.env["FIREBASE_AUTH_EMULATOR_HOST"];
-
     let app: admin.app.App;
 
     if (config.type === "emulator") {
       const projectId = config.projectId ?? `emulator-${config.name}`;
-
-      // Set auth emulator env var BEFORE initializing app so auth instance picks it up
-      const authHost = `${config.host}:${config.authPort ?? 9099}`;
-      process.env["FIREBASE_AUTH_EMULATOR_HOST"] = authHost;
-      this.emulatorAuthHosts.set(config.name, authHost);
-
       app = admin.initializeApp({ projectId }, config.name);
-
-      // Force auth instance creation while env var is set
-      app.auth();
-
-      // Clear env var after auth instance is cached
-      delete process.env["FIREBASE_AUTH_EMULATOR_HOST"];
 
       // Configure Firestore instance directly (no env var needed)
       const firestore = app.firestore();
@@ -72,7 +54,6 @@ export class ConnectionManager {
       this.states.set(config.name, { config, status: "connected" });
     } catch (err) {
       this.firestoreInstances.delete(config.name);
-      this.emulatorAuthHosts.delete(config.name);
       await app.delete();
       const message = err instanceof Error ? err.message : String(err);
       this.states.set(config.name, { config, status: "error", error: message });
@@ -87,7 +68,6 @@ export class ConnectionManager {
       this.apps.delete(name);
     }
     this.firestoreInstances.delete(name);
-    this.emulatorAuthHosts.delete(name);
     const state = this.states.get(name);
     if (state) {
       this.states.set(name, { ...state, status: "disconnected", error: undefined });
@@ -115,9 +95,22 @@ export class ConnectionManager {
     return app;
   }
 
+  /** Get the connection config for a connected connection. */
+  getConfig(name: string): ConnectionConfig {
+    const state = this.states.get(name);
+    if (!state) {
+      throw new Error(`No connection "${name}"`);
+    }
+    return state.config;
+  }
+
+  /** Get production auth instance (admin SDK). Throws if connection is emulator. */
   getAuth(name: string): admin.auth.Auth {
-    const app = this.getApp(name);
-    return app.auth();
+    const config = this.getConfig(name);
+    if (config.type === "emulator") {
+      throw new Error(`Use EmulatorAuthService for emulator connection "${name}"`);
+    }
+    return this.getApp(name).auth();
   }
 
   async disconnectAll(): Promise<void> {

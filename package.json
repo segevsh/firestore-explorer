@@ -2,7 +2,7 @@
   "name": "firestore-workbench",
   "displayName": "Firestore Workbench",
   "description": "Manage and explore Firestore databases from VS Code",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "publisher": "productivehub",
   "license": "MIT",
   "author": "ProductiveHub",
@@ -255,7 +255,8 @@
     "package": "npx --yes @vscode/vsce package --out firestore-explorer.vsix",
     "preview": "npm run build && npm run package && code --install-extension firestore-explorer.vsix --force && code-insiders --install-extension firestore-explorer.vsix --force",
     "test": "vitest run",
-    "lint": "eslint src/ --ext ts,tsx"
+    "lint": "eslint src/ --ext ts,tsx",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
