@@ -3,6 +3,8 @@ import * as admin from "firebase-admin";
 import type { ConnectionManager } from "./connectionManager";
 
 export interface QueryResult {
+  /** "collection" = QuerySnapshot, "document" = single DocumentSnapshot, "raw" = other */
+  resultType: "collection" | "document" | "raw";
   documents: Array<{ id: string; path: string; data: Record<string, unknown> }>;
   rawOutput?: unknown;
 }
@@ -62,7 +64,7 @@ function normalizeResult(result: unknown): QueryResult {
       path: doc.ref?.path ?? doc.id,
       data: typeof doc.data === "function" ? doc.data() : doc.data ?? {},
     }));
-    return { documents: docs };
+    return { resultType: "collection", documents: docs };
   }
 
   // Single DocumentSnapshot
@@ -70,6 +72,7 @@ function normalizeResult(result: unknown): QueryResult {
     const doc = result as any;
     if (doc.exists) {
       return {
+        resultType: "document",
         documents: [{
           id: doc.id,
           path: doc.ref?.path ?? doc.id,
@@ -77,14 +80,14 @@ function normalizeResult(result: unknown): QueryResult {
         }],
       };
     }
-    return { documents: [], rawOutput: "Document does not exist" };
+    return { resultType: "raw", documents: [], rawOutput: "Document does not exist" };
   }
 
   // Array of plain objects
   if (Array.isArray(result)) {
-    return { documents: [], rawOutput: result };
+    return { resultType: "raw", documents: [], rawOutput: result };
   }
 
   // Any other value
-  return { documents: [], rawOutput: result };
+  return { resultType: "raw", documents: [], rawOutput: result };
 }

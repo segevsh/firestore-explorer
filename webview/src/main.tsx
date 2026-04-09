@@ -3,11 +3,12 @@ import ReactDOM from "react-dom/client";
 import { CollectionView } from "./components/CollectionView";
 import { AuthView } from "./components/AuthView";
 import { QueryBuilder } from "./components/QueryBuilder";
+import { QueryResultsView } from "./components/QueryResultsView";
 import "./styles/index.css";
 
 declare global {
   interface Window {
-    __PANEL_TYPE__: "collection" | "document" | "queryBuilder" | "auth";
+    __PANEL_TYPE__: "collection" | "document" | "queryBuilder" | "auth" | "queryResults";
     __INITIAL_DATA__: Record<string, unknown>;
   }
 }
@@ -31,6 +32,15 @@ function App() {
       return <AuthView connectionName={data.connectionName as string} />;
     case "queryBuilder":
       return <QueryBuilder connectionName={data.connectionName as string} />;
+    case "queryResults":
+      return (
+        <QueryResultsView
+          connectionName={data.connectionName as string}
+          resultType={data.resultType as "collection" | "document" | "raw"}
+          documents={data.documents as any[] ?? []}
+          rawOutput={data.rawOutput}
+        />
+      );
     default:
       return <div>Unknown panel type</div>;
   }

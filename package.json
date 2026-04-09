@@ -2,7 +2,7 @@
   "name": "firestore-workbench",
   "displayName": "Firestore Workbench",
   "description": "Manage and explore Firestore databases from VS Code",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "productivehub",
   "license": "MIT",
   "author": "ProductiveHub",
@@ -118,6 +118,18 @@
         "icon": "$(play)"
       },
       {
+        "command": "firestoreExplorer.selectQueryConnection",
+        "title": "Firestore: Select Query Connection"
+      },
+      {
+        "command": "firestoreExplorer.renameQuery",
+        "title": "Rename"
+      },
+      {
+        "command": "firestoreExplorer.revealQueryInExplorer",
+        "title": "Reveal in File Explorer"
+      },
+      {
         "command": "firestoreExplorer.openAuth",
         "title": "Firestore: Open Auth Users"
       },
@@ -125,6 +137,16 @@
         "command": "firestoreExplorer.refreshAuth",
         "title": "Firestore: Refresh Auth",
         "icon": "$(refresh)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "firestoreExplorer.runSavedQuery",
+        "key": "cmd+enter",
+        "mac": "cmd+enter",
+        "win": "ctrl+enter",
+        "linux": "ctrl+enter",
+        "when": "editorTextFocus && editorLangId == javascript && resourcePath =~ /\\.firestore[\\/\\\\]queries[\\/\\\\]/"
       }
     ],
     "menus": {
@@ -184,11 +206,19 @@
         },
         {
           "command": "firestoreExplorer.createQueryFolder",
-          "when": "viewItem == queryServer || viewItem == queryFolder"
+          "when": "viewItem == queryFolder"
         },
         {
           "command": "firestoreExplorer.createQueryFile",
-          "when": "viewItem == queryServer || viewItem == queryFolder"
+          "when": "viewItem == queryFolder"
+        },
+        {
+          "command": "firestoreExplorer.renameQuery",
+          "when": "viewItem == savedQuery || viewItem == queryFolder"
+        },
+        {
+          "command": "firestoreExplorer.revealQueryInExplorer",
+          "when": "viewItem == savedQuery || viewItem == queryFolder"
         },
         {
           "command": "firestoreExplorer.runSavedQuery",

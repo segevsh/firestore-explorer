@@ -15,9 +15,13 @@ import { AuthPanel } from "./panels/authPanel";
 import { AuthTreeProvider } from "./providers/authTreeProvider";
 import { FirestoreFileSystemProvider } from "./providers/firestoreFileSystemProvider";
 import { runQuery } from "./services/queryRunner";
+import { QueryResultsPanel } from "./panels/queryResultsPanel";
+import { QueryConfigService } from "./services/queryConfigService";
+import { QueryConnectionCodeLensProvider } from "./providers/queryConnectionCodeLens";
 import type { ConnectionConfig } from "./types";
 
 let connectionManager: ConnectionManager;
+let queryResultsPanel: QueryResultsPanel | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   connectionManager = new ConnectionManager();
@@ -45,14 +49,39 @@ export function activate(context: vscode.ExtensionContext) {
     return (config.get<ConnectionConfig[]>("connections") ?? []).map(resolveConnection);
   }
 
+  // Query config & CodeLens
+  const queryConfig = workspaceRoot ? new QueryConfigService(workspaceRoot) : undefined;
+
   // Tree providers
   const connectionTreeProvider = new ConnectionTreeProvider(connectionManager, resolveConnection);
-  const savedQueriesProvider = new SavedQueriesTreeProvider(workspaceRoot, connectionManager);
+  const savedQueriesProvider = new SavedQueriesTreeProvider(workspaceRoot, queryConfig);
   const authTreeProvider = new AuthTreeProvider(connectionManager);
 
   vscode.window.registerTreeDataProvider("firestoreConnections", connectionTreeProvider);
   vscode.window.registerTreeDataProvider("firestoreSavedQueries", savedQueriesProvider);
   vscode.window.registerTreeDataProvider("firestoreAuth", authTreeProvider);
+
+  const codeLensProvider = workspaceRoot && queryConfig
+    ? new QueryConnectionCodeLensProvider(workspaceRoot, queryConfig, connectionManager)
+    : undefined;
+
+  if (codeLensProvider) {
+    context.subscriptions.push(
+      vscode.languages.registerCodeLensProvider({ language: "javascript", scheme: "file" }, codeLensProvider)
+    );
+  }
+
+  // Watch .firestore/queries/ for file changes so tree auto-refreshes after rename
+  if (workspaceRoot) {
+    const queriesPattern = new vscode.RelativePattern(
+      path.join(workspaceRoot, ".firestore", "queries"), "**/*"
+    );
+    const watcher = vscode.workspace.createFileSystemWatcher(queriesPattern);
+    watcher.onDidCreate(() => { queryConfig?.invalidate(); savedQueriesProvider.refresh(); codeLensProvider?.refresh(); });
+    watcher.onDidDelete(() => { queryConfig?.invalidate(); savedQueriesProvider.refresh(); codeLensProvider?.refresh(); });
+    watcher.onDidChange(() => { queryConfig?.invalidate(); savedQueriesProvider.refresh(); codeLensProvider?.refresh(); });
+    context.subscriptions.push(watcher);
+  }
 
   // Commands
   context.subscriptions.push(
@@ -183,62 +212,63 @@ export function activate(context: vscode.ExtensionContext) {
       await vscode.window.showTextDocument(doc);
     }),
 
-    vscode.commands.registerCommand("firestoreExplorer.createQueryFolder", async (item?: any) => {
-      let connectionName: string | undefined;
-      if (item?.connectionName) {
-        connectionName = item.connectionName;
-      } else {
-        const states = connectionManager.getAll();
-        if (states.length === 1) {
-          connectionName = states[0].config.name;
-        } else {
-          connectionName = await vscode.window.showQuickPick(
-            states.map((s) => s.config.name),
-            { placeHolder: "Select a connection" }
-          );
-        }
+    vscode.commands.registerCommand("firestoreExplorer.selectQueryConnection", async (filePath: string) => {
+      if (!queryConfig) return;
+      const states = connectionManager.getAll();
+      if (states.length === 0) {
+        vscode.window.showWarningMessage("No connections configured.");
+        return;
       }
-      if (!connectionName) return;
+      const current = queryConfig.getConnection(filePath);
+      const picked = await vscode.window.showQuickPick(
+        states.map((s) => ({
+          label: s.config.name,
+          description: s.status === "connected" ? "connected" : "disconnected",
+          picked: s.config.name === current,
+        })),
+        { placeHolder: "Select connection for this query" }
+      );
+      if (!picked) return;
+      queryConfig.setConnection(filePath, picked.label);
+      codeLensProvider?.refresh();
+    }),
 
-      const folderName = await vscode.window.showInputBox({ prompt: "Folder name" });
-      if (!folderName) return;
+    vscode.commands.registerCommand("firestoreExplorer.createQueryFolder", async (item?: any) => {
+      if (!workspaceRoot) return;
 
-      savedQueriesProvider.ensureQueriesDir(connectionName, folderName);
+      const parentDir = item?.folderPath
+        ?? path.join(workspaceRoot, ".firestore", "queries");
+      savedQueriesProvider.ensureQueriesDir(
+        path.relative(path.join(workspaceRoot, ".firestore", "queries"), parentDir) || undefined
+      );
+
+      // Auto-name: folder-1, folder-2, ...
+      let i = 1;
+      let folderPath = path.join(parentDir, `folder-${i}`);
+      while (fs.existsSync(folderPath)) {
+        folderPath = path.join(parentDir, `folder-${++i}`);
+      }
+      fs.mkdirSync(folderPath, { recursive: true });
       savedQueriesProvider.refresh();
     }),
 
     vscode.commands.registerCommand("firestoreExplorer.createQueryFile", async (item?: any) => {
-      let connectionName: string | undefined;
-      let subfolder: string | undefined;
+      if (!workspaceRoot) return;
 
-      if (item?.connectionName) {
-        connectionName = item.connectionName;
+      const parentDir = item?.folderPath
+        ?? path.join(workspaceRoot, ".firestore", "queries");
+      savedQueriesProvider.ensureQueriesDir(
+        path.relative(path.join(workspaceRoot, ".firestore", "queries"), parentDir) || undefined
+      );
+
+      // Auto-name: query-1.js, query-2.js, ...
+      let i = 1;
+      let filePath = path.join(parentDir, `query-${i}.js`);
+      while (fs.existsSync(filePath)) {
+        filePath = path.join(parentDir, `query-${++i}.js`);
       }
-      if (item?.folderName) {
-        subfolder = item.folderName;
-      }
 
-      if (!connectionName) {
-        const states = connectionManager.getAll();
-        if (states.length === 1) {
-          connectionName = states[0].config.name;
-        } else {
-          connectionName = await vscode.window.showQuickPick(
-            states.map((s) => s.config.name),
-            { placeHolder: "Select a connection" }
-          );
-        }
-      }
-      if (!connectionName) return;
-
-      const queryName = await vscode.window.showInputBox({ prompt: "Query name" });
-      if (!queryName) return;
-
-      const dir = savedQueriesProvider.ensureQueriesDir(connectionName, subfolder);
-      const filePath = path.join(dir, `${queryName}.js`);
-
-      const template = `// Query for ${connectionName}
-// Available globals: app, db, auth, admin
+      const template = `// Available globals: app, db, auth, admin
 //
 // Return a QuerySnapshot, DocumentSnapshot, or any value:
 //   return db.collection("users").limit(10).get();
@@ -246,42 +276,109 @@ export function activate(context: vscode.ExtensionContext) {
 
 return db.collection("").limit(10).get();
 `;
-
       fs.writeFileSync(filePath, template, "utf-8");
+
+      // Assign connection if only one exists
+      const states = connectionManager.getAll();
+      if (states.length === 1) {
+        queryConfig?.setConnection(filePath, states[0].config.name);
+      }
+
+      savedQueriesProvider.refresh();
       const doc = await vscode.workspace.openTextDocument(filePath);
       await vscode.window.showTextDocument(doc);
+    }),
+
+    vscode.commands.registerCommand("firestoreExplorer.renameQuery", async (item?: any) => {
+      if (!item?.filePath && !item?.folderPath) return;
+
+      const isFolder = !!item.folderPath;
+      const currentPath = isFolder ? item.folderPath : item.filePath;
+      const currentName = isFolder ? path.basename(currentPath) : path.basename(currentPath, ".js");
+
+      const newName = await vscode.window.showInputBox({
+        prompt: `Rename ${isFolder ? "folder" : "query"}`,
+        value: currentName,
+        valueSelection: [0, currentName.length],
+      });
+      if (!newName || newName === currentName) return;
+
+      const newPath = path.join(path.dirname(currentPath), isFolder ? newName : `${newName}.js`);
+      fs.renameSync(currentPath, newPath);
+
+      // Update config mapping for files
+      if (!isFolder && queryConfig) {
+        const conn = queryConfig.getConnection(currentPath);
+        if (conn) {
+          queryConfig.removeConnection(currentPath);
+          queryConfig.setConnection(newPath, conn);
+        }
+      }
+
       savedQueriesProvider.refresh();
     }),
 
+    vscode.commands.registerCommand("firestoreExplorer.revealQueryInExplorer", async (item?: any) => {
+      const targetPath = item?.filePath ?? item?.folderPath;
+      if (targetPath) {
+        await vscode.commands.executeCommand("revealInExplorer", vscode.Uri.file(targetPath));
+      }
+    }),
+
     vscode.commands.registerCommand("firestoreExplorer.runSavedQuery", async (item?: any) => {
-      if (!item?.filePath || !item?.connectionName) {
-        vscode.window.showWarningMessage("Run this command from the Saved Queries tree.");
+      let filePath: string | undefined = item?.filePath;
+      let connectionName: string | undefined = item?.connectionName;
+
+      // If no filePath, try the active editor
+      if (!filePath) {
+        const editor = vscode.window.activeTextEditor;
+        if (editor && editor.document.uri.scheme === "file" && editor.document.fileName.endsWith(".js")) {
+          filePath = editor.document.fileName;
+        }
+      }
+      if (!filePath) {
+        vscode.window.showWarningMessage("Open a query file or run from the Saved Queries tree.");
         return;
       }
 
-      const state = connectionManager.getState(item.connectionName);
-      if (!state || state.status !== "connected") {
-        vscode.window.showWarningMessage(`Not connected to ${item.connectionName}. Connect first.`);
+      // Resolve connection from config if not provided
+      if (!connectionName && queryConfig) {
+        connectionName = queryConfig.getConnection(filePath);
+      }
+      if (!connectionName) {
+        vscode.window.showWarningMessage("No connection assigned. Click the connection selector above the query.");
         return;
+      }
+
+      // Auto-connect if needed
+      const state = connectionManager.getState(connectionName);
+      if (!state) {
+        vscode.window.showWarningMessage(`Connection "${connectionName}" not found.`);
+        return;
+      }
+      if (state.status !== "connected") {
+        try {
+          await connectionManager.connect(resolveConnection(state.config));
+          connectionTreeProvider.refresh();
+          authTreeProvider.refresh();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          vscode.window.showErrorMessage(`Failed to connect to ${connectionName}: ${msg}`);
+          return;
+        }
       }
 
       try {
-        const code = fs.readFileSync(item.filePath, "utf-8");
-        const result = await runQuery(code, item.connectionName, connectionManager);
+        const code = fs.readFileSync(filePath, "utf-8");
+        const result = await runQuery(code, connectionName, connectionManager);
 
-        if (result.documents.length > 0) {
-          // Show results in a new untitled JSON document
-          const content = JSON.stringify(result.documents, null, 2);
-          const doc = await vscode.workspace.openTextDocument({ content, language: "json" });
-          await vscode.window.showTextDocument(doc);
-        } else if (result.rawOutput !== undefined) {
-          const content = typeof result.rawOutput === "string"
-            ? result.rawOutput
-            : JSON.stringify(result.rawOutput, null, 2);
-          const doc = await vscode.workspace.openTextDocument({ content, language: "json" });
-          await vscode.window.showTextDocument(doc);
+        // Show results in split panel beside the query editor
+        if (queryResultsPanel && !queryResultsPanel.disposed) {
+          queryResultsPanel.update(connectionName, result);
         } else {
-          vscode.window.showInformationMessage("Query returned no results.");
+          queryResultsPanel = new QueryResultsPanel(
+            context, connectionManager, fsProvider, connectionName, result
+          );
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
