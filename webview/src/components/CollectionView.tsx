@@ -19,6 +19,7 @@ export function CollectionView({ connectionName, initialCollectionPath }: Collec
   const [documents, setDocuments] = useState<FirestoreDoc[]>([]);
   const [viewMode, setViewMode] = useState<"table" | "json">("table");
   const [limit, setLimit] = useState(500);
+  const [findDocId, setFindDocId] = useState("");
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -131,6 +132,16 @@ export function CollectionView({ connectionName, initialCollectionPath }: Collec
     postMessage({ type: "openDocument", connectionName, docPath });
   }
 
+  function handleFindById() {
+    const id = findDocId.trim();
+    if (!id) return;
+    postMessage({
+      type: "openDocument",
+      connectionName,
+      docPath: `${collectionPath}/${id}`,
+    });
+  }
+
   function handleToggleColumn(col: string) {
     setVisibleColumns((prev) =>
       prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
@@ -165,6 +176,24 @@ export function CollectionView({ connectionName, initialCollectionPath }: Collec
             onClick={() => setViewMode("json")}
           >
             JSON
+          </button>
+        </div>
+        <div className="find-by-id">
+          <label>
+            Find by ID:
+            <input
+              type="text"
+              value={findDocId}
+              onChange={(e) => setFindDocId(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleFindById();
+              }}
+              placeholder="document id"
+              className="find-id-input"
+            />
+          </label>
+          <button onClick={handleFindById} disabled={!findDocId.trim()}>
+            Run
           </button>
         </div>
       </div>

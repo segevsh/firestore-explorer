@@ -51,8 +51,94 @@ export class DocumentEditorPanel {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`Failed to open document: ${message}`);
+      this.showError(connectionName, docPath, message);
     }
+  }
+
+  private showError(connectionName: string, docPath: string, message: string) {
+    const docId = docPath.split("/").pop() ?? docPath;
+    const errorPanel = vscode.window.createWebviewPanel(
+      "firestoreDocError",
+      `${docId} — not found`,
+      vscode.ViewColumn.One,
+      { enableScripts: false }
+    );
+    errorPanel.webview.html = this.getErrorHtml(connectionName, docPath, message);
+  }
+
+  private getErrorHtml(connectionName: string, docPath: string, message: string): string {
+    const rows: [string, string][] = [
+      ["Connection", connectionName],
+      ["Requested Path", docPath],
+    ];
+    const tableRows = rows
+      .map(([label, value]) => `<tr><td class="label">${label}</td><td class="value">${escapeHtml(value)}</td></tr>`)
+      .join("\n");
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+      color: var(--vscode-foreground);
+      background: var(--vscode-editor-background);
+      padding: 24px;
+      margin: 0;
+    }
+    .error-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      background: var(--vscode-inputValidation-errorBackground, rgba(255, 0, 0, 0.1));
+      border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+      color: var(--vscode-errorForeground);
+      border-radius: 4px;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+    .error-icon { font-size: 18px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    tr { border-bottom: 1px solid var(--vscode-widget-border); }
+    td { padding: 6px 8px; vertical-align: top; }
+    .label {
+      font-weight: 600;
+      white-space: nowrap;
+      width: 140px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .value {
+      font-family: var(--vscode-editor-font-family);
+      word-break: break-all;
+    }
+    .message {
+      margin-top: 16px;
+      padding: 10px;
+      background: var(--vscode-textBlockQuote-background);
+      border-left: 3px solid var(--vscode-errorForeground);
+      font-family: var(--vscode-editor-font-family);
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="error-banner">
+    <span class="error-icon">⚠</span>
+    <span>Document not found</span>
+  </div>
+  <table>${tableRows}</table>
+  <div class="message">${escapeHtml(message)}</div>
+</body>
+</html>`;
   }
 
   private async handleSave(uri: vscode.Uri) {
