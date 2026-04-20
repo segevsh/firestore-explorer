@@ -29,7 +29,8 @@ describe("ConnectionManager", () => {
   let manager: ConnectionManager;
 
   beforeEach(() => {
-    manager = new ConnectionManager();
+    // Skip the real TCP probe — firebase-admin is mocked so there's nothing to reach.
+    manager = new ConnectionManager({ probe: async () => {} });
   });
 
   it("starts with no connections", () => {

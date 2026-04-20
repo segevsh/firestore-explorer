@@ -2,13 +2,15 @@ import React, { useState, useCallback, useMemo } from "react";
 import { useVsCodeMessages } from "../hooks/useVsCodeMessages";
 import { TableView } from "./TableView";
 import { JsonView } from "./JsonView";
-import type { FirestoreDoc } from "../../../src/types";
+import { LogsView } from "./LogsView";
+import type { FirestoreDoc, LogEntry } from "../../../src/types";
 
 interface QueryResultsViewProps {
   connectionName: string;
   resultType: "collection" | "document" | "raw";
   documents: FirestoreDoc[];
   rawOutput?: unknown;
+  logs?: LogEntry[];
 }
 
 function extractColumns(docs: FirestoreDoc[]): string[] {
@@ -21,8 +23,9 @@ function extractColumns(docs: FirestoreDoc[]): string[] {
   return Array.from(colSet);
 }
 
-export function QueryResultsView({ connectionName, resultType, documents, rawOutput }: QueryResultsViewProps) {
-  const [viewMode, setViewMode] = useState<"table" | "json">("table");
+export function QueryResultsView({ connectionName, resultType, documents, rawOutput, logs }: QueryResultsViewProps) {
+  const [viewMode, setViewMode] = useState<"table" | "json" | "logs">("table");
+  const effectiveLogs = logs ?? [];
 
   const columns = useMemo(() => extractColumns(documents), [documents]);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(columns);
@@ -49,10 +52,21 @@ export function QueryResultsView({ connectionName, resultType, documents, rawOut
     return (
       <div className="collection-view">
         <div className="collection-toolbar">
-          <span className="status-text">Raw output</span>
+          <div className="view-toggle">
+            <button className={viewMode !== "logs" ? "active" : ""} onClick={() => setViewMode("table")}>
+              Output
+            </button>
+            <button className={viewMode === "logs" ? "active" : ""} onClick={() => setViewMode("logs")}>
+              Logs{effectiveLogs.length ? ` (${effectiveLogs.length})` : ""}
+            </button>
+          </div>
         </div>
         <div className="collection-content">
-          <pre className="json-view" style={{ whiteSpace: "pre-wrap" }}>{content}</pre>
+          {viewMode === "logs" ? (
+            <LogsView logs={effectiveLogs} />
+          ) : (
+            <pre className="json-view" style={{ whiteSpace: "pre-wrap" }}>{content}</pre>
+          )}
         </div>
       </div>
     );
@@ -62,11 +76,25 @@ export function QueryResultsView({ connectionName, resultType, documents, rawOut
   if (documents.length === 0) {
     return (
       <div className="collection-view">
-        <div className="collection-content">
-          <div className="empty-state">
-            <div className="empty-icon">📭</div>
-            <div className="empty-text">Query returned no results</div>
+        <div className="collection-toolbar">
+          <div className="view-toggle">
+            <button className={viewMode !== "logs" ? "active" : ""} onClick={() => setViewMode("table")}>
+              Results
+            </button>
+            <button className={viewMode === "logs" ? "active" : ""} onClick={() => setViewMode("logs")}>
+              Logs{effectiveLogs.length ? ` (${effectiveLogs.length})` : ""}
+            </button>
           </div>
+        </div>
+        <div className="collection-content">
+          {viewMode === "logs" ? (
+            <LogsView logs={effectiveLogs} />
+          ) : (
+            <div className="empty-state">
+              <div className="empty-icon">📭</div>
+              <div className="empty-text">Query returned no results</div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -85,6 +113,9 @@ export function QueryResultsView({ connectionName, resultType, documents, rawOut
           </button>
           <button className={viewMode === "json" ? "active" : ""} onClick={() => setViewMode("json")}>
             JSON
+          </button>
+          <button className={viewMode === "logs" ? "active" : ""} onClick={() => setViewMode("logs")}>
+            Logs{effectiveLogs.length ? ` (${effectiveLogs.length})` : ""}
           </button>
         </div>
       </div>
@@ -105,8 +136,10 @@ export function QueryResultsView({ connectionName, resultType, documents, rawOut
             onOpenSubCollection={() => {}}
             subCollections={new Map()}
           />
-        ) : (
+        ) : viewMode === "json" ? (
           <JsonView documents={documents} />
+        ) : (
+          <LogsView logs={effectiveLogs} />
         )}
       </div>
 

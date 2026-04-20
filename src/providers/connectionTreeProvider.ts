@@ -18,8 +18,11 @@ export class ConnectionTreeItem extends vscode.TreeItem {
     if (status === "connected") {
       this.description = typeLabel;
       this.iconPath = new vscode.ThemeIcon("database");
+    } else if (status === "connecting") {
+      this.description = `${typeLabel} · connecting…`;
+      this.iconPath = new vscode.ThemeIcon("sync~spin");
     } else if (status === "error") {
-      this.description = `${typeLabel} · ⚠ error`;
+      this.description = `${typeLabel} · ⚠ unreachable`;
       this.tooltip = error ?? "Connection failed";
       this.iconPath = new vscode.ThemeIcon("error", new vscode.ThemeColor("errorForeground"));
     } else {
@@ -91,24 +94,22 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<vscode.Tr
     if (element instanceof ConnectionTreeItem) {
       const { connectionState } = element;
 
-      // Auto-connect on expand if not yet connected
+      // Auto-connect on expand if not yet connected. Fire-and-forget: the
+      // connectionManager flips state to "connecting" synchronously and
+      // notifies listeners on every transition so the tree refreshes itself.
       if (connectionState.status === "disconnected") {
-        try {
-          await this.connectionManager.connect(
-            this.resolveConnection(connectionState.config)
-          );
-          // Refresh the whole tree so icon/description update
-          this.refresh();
-          return [new InfoTreeItem("Connecting…", "sync~spin")];
-        } catch (err) {
-          this.refresh();
-          const message = err instanceof Error ? err.message : String(err);
-          return [new InfoTreeItem(`Connection failed: ${message}`, "error")];
-        }
+        this.connectionManager
+          .connect(this.resolveConnection(connectionState.config))
+          .catch(() => { /* error/cancel reflected in state */ });
+        return [new InfoTreeItem("Connecting…", "sync~spin")];
+      }
+
+      if (connectionState.status === "connecting") {
+        return [new InfoTreeItem("Connecting…", "sync~spin")];
       }
 
       if (connectionState.status === "error") {
-        return [new InfoTreeItem(`Error: ${connectionState.error ?? "unknown"}`, "warning")];
+        return [new InfoTreeItem(`⚠ ${connectionState.error ?? "Unreachable"}`, "warning")];
       }
 
       try {

@@ -22,6 +22,8 @@ Browse, edit, and query Firestore databases directly from VS Code — no more ta
 - **Sub-collection navigation** — breadcrumb-driven drill-down through nested paths
 - **Visual query builder** — compose `where` / `orderBy` / `limit` clauses with bidirectional JavaScript sync
 - **Saved queries** — persist queries as `.js` files you can version-control alongside your project
+- **Run queries from anywhere** — annotate any `.js` / `.ts` file with `// @firestore-query` to get a CodeLens and `Cmd+Enter` runner, no need to move the file into `.firestore/queries/`
+- **Resilient connections** — emulator unreachability is detected in under 2 seconds with a clear ⚠ indicator, and a one-click **Stop** button cancels slow connect attempts
 - **Auth management** — browse, search, disable, and delete Firebase Auth users directly from the sidebar
 - **Loading indicators** — live status and spinners while large collections stream in
 
@@ -94,6 +96,33 @@ You can declare any number of emulator and production connections in the same ar
 ## Saved Queries
 
 Queries you build in the query builder are saved as JavaScript files in `.firestore/queries/` at your workspace root. They appear under the **Saved Queries** sidebar view and can be reopened, edited, and re-run anytime. Because they're plain `.js` files, you can commit them to version control and share query snippets with your team.
+
+### Running Queries From Any File
+
+You don't have to move queries into `.firestore/queries/`. Add the marker comment `// @firestore-query` anywhere in the first 20 lines of any `.js`, `.ts`, `.mjs`, or `.cjs` file and the extension will:
+
+- Show the **Select Connection…** / **Run Query** CodeLens at the top of the file
+- Enable the `Cmd+Enter` (`Ctrl+Enter` on Windows/Linux) keybinding to run the query
+- Persist the chosen connection per-file in `.firestore/queries.config.json`
+
+```js
+// @firestore-query
+// A one-off ad-hoc query kept inside src/scripts/ — no folder restriction.
+return db.collection("users").where("disabled", "==", true).limit(5).get();
+```
+
+The same globals are available as in saved queries: `app`, `db`, `auth`, `admin`.
+
+## Connection Status
+
+Connections show live status in the sidebar:
+
+- **database icon** — connected
+- **spinner** — connecting (click the adjacent ⏹ button to cancel)
+- **error icon + `⚠ unreachable`** — fast-fail when the emulator port isn't responding (under 2 seconds)
+- **debug-disconnect icon** — disconnected
+
+Emulator connections are probed with a short TCP check before the full Firestore handshake, so an offline emulator surfaces instantly instead of hanging on a long gRPC timeout.
 
 ## Commands
 

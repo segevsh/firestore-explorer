@@ -2,7 +2,7 @@
   "name": "firestore-workbench",
   "displayName": "Firestore Workbench",
   "description": "Manage and explore Firestore databases from VS Code",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "productivehub",
   "license": "MIT",
   "author": "ProductiveHub",
@@ -80,6 +80,11 @@
         "title": "Firestore: Disconnect"
       },
       {
+        "command": "firestoreExplorer.cancelConnect",
+        "title": "Firestore: Stop Connecting",
+        "icon": "$(stop-circle)"
+      },
+      {
         "command": "firestoreExplorer.openCollection",
         "title": "Firestore: Open Collection"
       },
@@ -146,7 +151,7 @@
         "mac": "cmd+enter",
         "win": "ctrl+enter",
         "linux": "ctrl+enter",
-        "when": "editorTextFocus && editorLangId == javascript && resourcePath =~ /\\.firestore[\\/\\\\]queries[\\/\\\\]/"
+        "when": "editorTextFocus && firestoreExplorer.isQueryFile"
       }
     ],
     "menus": {
@@ -195,6 +200,15 @@
         {
           "command": "firestoreExplorer.disconnect",
           "when": "viewItem == connection-connected"
+        },
+        {
+          "command": "firestoreExplorer.cancelConnect",
+          "when": "viewItem == connection-connecting",
+          "group": "inline"
+        },
+        {
+          "command": "firestoreExplorer.cancelConnect",
+          "when": "viewItem == connection-connecting"
         },
         {
           "command": "firestoreExplorer.removeConnection",

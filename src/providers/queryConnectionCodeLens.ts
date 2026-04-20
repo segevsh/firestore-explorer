@@ -4,11 +4,15 @@ import type { QueryConfigService } from "../services/queryConfigService";
 import type { ConnectionManager } from "../services/connectionManager";
 
 /**
- * Provides a CodeLens at the top of .js files inside .firestore/queries/
- * showing the assigned connection with a click-to-change action.
- *
- * Also adds a "Run Query" CodeLens next to it.
+ * Shows a "Connection: …" and "Run Query" CodeLens at the top of:
+ *   1. Any .js file under .firestore/queries/ (the saved-queries folder)
+ *   2. Any .js / .ts file whose first lines contain the marker
+ *      `// @firestore-query` — so you can run queries from anywhere
+ *      in the workspace without moving the file.
  */
+export const QUERY_MARKER = "@firestore-query";
+const MARKER_SCAN_LINES = 20;
+
 export class QueryConnectionCodeLensProvider implements vscode.CodeLensProvider {
   private _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
   readonly onDidChangeCodeLenses = this._onDidChangeCodeLenses.event;
@@ -24,7 +28,7 @@ export class QueryConnectionCodeLensProvider implements vscode.CodeLensProvider 
   }
 
   provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-    if (!this.isQueryFile(document.uri.fsPath)) return [];
+    if (!this.isQueryCandidate(document)) return [];
 
     const topRange = new vscode.Range(0, 0, 0, 0);
     const filePath = document.uri.fsPath;
@@ -39,7 +43,6 @@ export class QueryConnectionCodeLensProvider implements vscode.CodeLensProvider 
 
     const lenses = [selectLens];
 
-    // Add Run button if connection is set and connected
     if (connection) {
       const state = this.connectionManager.getState(connection);
       const isConnected = state?.status === "connected";
@@ -56,9 +59,25 @@ export class QueryConnectionCodeLensProvider implements vscode.CodeLensProvider 
     return lenses;
   }
 
-  private isQueryFile(fsPath: string): boolean {
-    if (!fsPath.endsWith(".js")) return false;
-    const queriesDir = path.join(this.workspaceRoot, ".firestore", "queries");
-    return fsPath.startsWith(queriesDir);
+  private isQueryCandidate(document: vscode.TextDocument): boolean {
+    const fsPath = document.uri.fsPath;
+    if (!/\.(js|ts|mjs|cjs)$/i.test(fsPath)) return false;
+    if (this.isInQueriesDir(fsPath)) return true;
+    return hasQueryMarker(document);
   }
+
+  private isInQueriesDir(fsPath: string): boolean {
+    const queriesDir = path.join(this.workspaceRoot, ".firestore", "queries");
+    const rel = path.relative(queriesDir, fsPath);
+    return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+  }
+}
+
+/** Cheap marker scan — only looks at the first handful of lines. */
+export function hasQueryMarker(document: vscode.TextDocument): boolean {
+  const lines = Math.min(document.lineCount, MARKER_SCAN_LINES);
+  for (let i = 0; i < lines; i++) {
+    if (document.lineAt(i).text.includes(QUERY_MARKER)) return true;
+  }
+  return false;
 }

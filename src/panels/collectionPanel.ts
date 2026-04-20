@@ -3,7 +3,23 @@ import * as path from "path";
 import type { ConnectionManager } from "../services/connectionManager";
 import { FirestoreService } from "../services/firestoreService";
 import type { FirestoreFileSystemProvider } from "../providers/firestoreFileSystemProvider";
-import type { WebviewToHostMessage } from "../types";
+import type { LogEntry, WebviewToHostMessage } from "../types";
+
+function makeReadLogs(label: string, start: number, count: number, hasMore: boolean): LogEntry[] {
+  const end = Date.now();
+  return [
+    {
+      level: "info",
+      timestamp: start,
+      message: `${label} started`,
+    },
+    {
+      level: "info",
+      timestamp: end,
+      message: `${label} completed in ${end - start}ms — ${count} document${count === 1 ? "" : "s"}${hasMore ? " (more available)" : ""}`,
+    },
+  ];
+}
 
 export class CollectionPanel {
   private panel: vscode.WebviewPanel;
@@ -46,22 +62,38 @@ export class CollectionPanel {
         case "fetchDocuments": {
           const db = this.connectionManager.getFirestore(msg.connectionName);
           const svc = new FirestoreService(db);
+          const start = Date.now();
           const result = await svc.getDocuments(msg.collectionPath, msg.limit);
+          const logs = makeReadLogs(
+            `Read ${msg.collectionPath} (limit ${msg.limit})`,
+            start,
+            result.documents.length,
+            result.hasMore
+          );
           this.panel.webview.postMessage({
             type: "loadDocuments",
             documents: result.documents,
             hasMore: result.hasMore,
+            logs,
           });
           break;
         }
         case "fetchMore": {
           const db = this.connectionManager.getFirestore(msg.connectionName);
           const svc = new FirestoreService(db);
+          const start = Date.now();
           const result = await svc.getDocuments(msg.collectionPath, msg.limit, msg.afterDocId);
+          const logs = makeReadLogs(
+            `Read more ${msg.collectionPath} (limit ${msg.limit}, after ${msg.afterDocId})`,
+            start,
+            result.documents.length,
+            result.hasMore
+          );
           this.panel.webview.postMessage({
             type: "appendDocuments",
             documents: result.documents,
             hasMore: result.hasMore,
+            logs,
           });
           break;
         }

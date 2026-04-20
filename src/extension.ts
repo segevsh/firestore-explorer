@@ -17,7 +17,7 @@ import { FirestoreFileSystemProvider } from "./providers/firestoreFileSystemProv
 import { runQuery } from "./services/queryRunner";
 import { QueryResultsPanel } from "./panels/queryResultsPanel";
 import { QueryConfigService } from "./services/queryConfigService";
-import { QueryConnectionCodeLensProvider } from "./providers/queryConnectionCodeLens";
+import { QueryConnectionCodeLensProvider, hasQueryMarker } from "./providers/queryConnectionCodeLens";
 import type { ConnectionConfig } from "./types";
 
 let connectionManager: ConnectionManager;
@@ -61,15 +61,50 @@ export function activate(context: vscode.ExtensionContext) {
   vscode.window.registerTreeDataProvider("firestoreSavedQueries", savedQueriesProvider);
   vscode.window.registerTreeDataProvider("firestoreAuth", authTreeProvider);
 
+  // Refresh all tree views whenever connection state changes (connecting,
+  // connected, disconnected, error) so the UI reflects progress in real time.
+  const unsubscribe = connectionManager.onChange(() => {
+    connectionTreeProvider.refresh();
+    authTreeProvider.refresh();
+  });
+  context.subscriptions.push({ dispose: unsubscribe });
+
   const codeLensProvider = workspaceRoot && queryConfig
     ? new QueryConnectionCodeLensProvider(workspaceRoot, queryConfig, connectionManager)
     : undefined;
 
   if (codeLensProvider) {
     context.subscriptions.push(
-      vscode.languages.registerCodeLensProvider({ language: "javascript", scheme: "file" }, codeLensProvider)
+      vscode.languages.registerCodeLensProvider({ language: "javascript", scheme: "file" }, codeLensProvider),
+      vscode.languages.registerCodeLensProvider({ language: "typescript", scheme: "file" }, codeLensProvider),
     );
   }
+
+  // Publish a context key that reflects whether the active editor is a runnable
+  // Firestore query — drives the Cmd+Enter `when` clause for files outside the
+  // .firestore/queries folder.
+  const updateQueryContext = () => {
+    const editor = vscode.window.activeTextEditor;
+    let isQuery = false;
+    if (editor && editor.document.uri.scheme === "file") {
+      const fsPath = editor.document.uri.fsPath;
+      if (/\.(js|ts|mjs|cjs)$/i.test(fsPath)) {
+        if (workspaceRoot && fsPath.startsWith(path.join(workspaceRoot, ".firestore", "queries"))) {
+          isQuery = true;
+        } else if (hasQueryMarker(editor.document)) {
+          isQuery = true;
+        }
+      }
+    }
+    vscode.commands.executeCommand("setContext", "firestoreExplorer.isQueryFile", isQuery);
+  };
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(updateQueryContext),
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      if (e.document === vscode.window.activeTextEditor?.document) updateQueryContext();
+    }),
+  );
+  updateQueryContext();
 
   // Watch .firestore/queries/ for file changes so tree auto-refreshes after rename
   if (workspaceRoot) {
@@ -150,6 +185,10 @@ export function activate(context: vscode.ExtensionContext) {
       connectionTreeProvider.refresh();
       savedQueriesProvider.refresh();
       authTreeProvider.refresh();
+    }),
+
+    vscode.commands.registerCommand("firestoreExplorer.cancelConnect", (item: ConnectionTreeItem) => {
+      connectionManager.cancel(item.connectionState.config.name);
     }),
 
     vscode.commands.registerCommand("firestoreExplorer.removeConnection", async (item: ConnectionTreeItem) => {
@@ -332,7 +371,7 @@ return db.collection("").limit(10).get();
       // If no filePath, try the active editor
       if (!filePath) {
         const editor = vscode.window.activeTextEditor;
-        if (editor && editor.document.uri.scheme === "file" && editor.document.fileName.endsWith(".js")) {
+        if (editor && editor.document.uri.scheme === "file" && /\.(js|ts|mjs|cjs)$/i.test(editor.document.fileName)) {
           filePath = editor.document.fileName;
         }
       }

@@ -1,12 +1,52 @@
 import * as vm from "vm";
+import * as util from "util";
 import * as admin from "firebase-admin";
 import type { ConnectionManager } from "./connectionManager";
+
+export interface LogEntry {
+  level: "log" | "info" | "warn" | "error" | "debug";
+  timestamp: number; // ms since epoch
+  message: string;   // pre-formatted string
+}
 
 export interface QueryResult {
   /** "collection" = QuerySnapshot, "document" = single DocumentSnapshot, "raw" = other */
   resultType: "collection" | "document" | "raw";
   documents: Array<{ id: string; path: string; data: Record<string, unknown> }>;
   rawOutput?: unknown;
+  /** Captured console output from the script execution, plus start/end timing entries. */
+  logs: LogEntry[];
+}
+
+function formatArgs(args: unknown[]): string {
+  return args
+    .map((a) =>
+      typeof a === "string" ? a : util.inspect(a, { depth: 4, breakLength: 120 })
+    )
+    .join(" ");
+}
+
+function makeConsoleProxy(logs: LogEntry[]): Console {
+  const push = (level: LogEntry["level"]) => (...args: unknown[]) => {
+    logs.push({ level, timestamp: Date.now(), message: formatArgs(args) });
+  };
+  // Provide the common methods a user script would reach for.
+  const proxy = {
+    log: push("log"),
+    info: push("info"),
+    warn: push("warn"),
+    error: push("error"),
+    debug: push("debug"),
+    trace: push("debug"),
+    dir: (obj: unknown) => {
+      logs.push({
+        level: "log",
+        timestamp: Date.now(),
+        message: util.inspect(obj, { depth: 4, breakLength: 120 }),
+      });
+    },
+  };
+  return proxy as unknown as Console;
 }
 
 /**
@@ -36,6 +76,9 @@ export async function runQuery(
     // Auth may not be available (e.g. emulator without auth)
   }
 
+  const logs: LogEntry[] = [];
+  const consoleProxy = makeConsoleProxy(logs);
+
   // Wrap user code in an async IIFE so `await` works at top level
   const wrapped = `(async () => {\n${code}\n})()`;
 
@@ -44,19 +87,44 @@ export async function runQuery(
     db: firestore,
     auth,
     admin,
-    console,
+    console: consoleProxy,
     // Allow the script to return results
     __result: undefined as unknown,
   };
 
-  const script = new vm.Script(wrapped, { filename: `query-${connectionName}.js` });
-  const context = vm.createContext(sandbox);
-  const result = await script.runInContext(context);
+  const start = Date.now();
+  logs.push({ level: "info", timestamp: start, message: "Script execution started" });
 
-  return normalizeResult(result);
+  try {
+    const script = new vm.Script(wrapped, { filename: `query-${connectionName}.js` });
+    const context = vm.createContext(sandbox);
+    const result = await script.runInContext(context);
+    const elapsed = Date.now() - start;
+    logs.push({
+      level: "info",
+      timestamp: Date.now(),
+      message: `Script execution completed in ${elapsed}ms`,
+    });
+    const normalized = normalizeResult(result);
+    return { ...normalized, logs };
+  } catch (err) {
+    const elapsed = Date.now() - start;
+    const errMsg = err instanceof Error ? err.stack ?? err.message : String(err);
+    logs.push({
+      level: "error",
+      timestamp: Date.now(),
+      message: `Script execution failed after ${elapsed}ms: ${errMsg}`,
+    });
+    return {
+      resultType: "raw",
+      documents: [],
+      rawOutput: errMsg,
+      logs,
+    };
+  }
 }
 
-function normalizeResult(result: unknown): QueryResult {
+function normalizeResult(result: unknown): Omit<QueryResult, "logs"> {
   // Firestore QuerySnapshot
   if (result && typeof result === "object" && "docs" in result && Array.isArray((result as any).docs)) {
     const docs = (result as any).docs.map((doc: any) => ({

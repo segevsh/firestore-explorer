@@ -5,15 +5,9 @@ import * as path from "path";
  * Manages .firestore/queries.config.json — persists the mapping
  * of query file paths to their selected connection name.
  *
- * Format:
- * {
- *   "queries": {
- *     "local-emulator/users.js": "local-emulator",
- *     "reports/daily.js": "prod"
- *   }
- * }
- *
- * Keys are relative to .firestore/queries/ for portability.
+ * Keys are workspace-relative paths (e.g. `.firestore/queries/users.js`,
+ * `src/scripts/cleanup.js`). For backwards compatibility, keys written
+ * by older versions (relative to `.firestore/queries/`) are still read.
  */
 
 interface QueryConfig {
@@ -50,29 +44,41 @@ export class QueryConfigService {
     fs.writeFileSync(this.configPath, JSON.stringify(this.cache, null, 2) + "\n", "utf-8");
   }
 
-  /** Get the relative key for a query file path. */
-  private relativeKey(filePath: string): string {
+  /** Primary (workspace-relative) and legacy (queries-dir-relative) keys for a file. */
+  private keysFor(filePath: string): { primary: string; legacy?: string } {
+    const primary = path.relative(this.workspaceRoot, filePath).replace(/\\/g, "/");
     const queriesDir = path.join(this.workspaceRoot, ".firestore", "queries");
-    return path.relative(queriesDir, filePath).replace(/\\/g, "/");
+    const queryRelative = path.relative(queriesDir, filePath);
+    const legacy = queryRelative && !queryRelative.startsWith("..")
+      ? queryRelative.replace(/\\/g, "/")
+      : undefined;
+    return { primary, legacy };
   }
 
   /** Get the connection name for a query file, or undefined if not set. */
   getConnection(filePath: string): string | undefined {
+    const { primary, legacy } = this.keysFor(filePath);
     const config = this.load();
-    return config.queries[this.relativeKey(filePath)];
+    return config.queries[primary] ?? (legacy ? config.queries[legacy] : undefined);
   }
 
   /** Set the connection name for a query file. */
   setConnection(filePath: string, connectionName: string): void {
+    const { primary, legacy } = this.keysFor(filePath);
     const config = this.load();
-    config.queries[this.relativeKey(filePath)] = connectionName;
+    config.queries[primary] = connectionName;
+    if (legacy && legacy !== primary) {
+      delete config.queries[legacy];
+    }
     this.save();
   }
 
   /** Remove mapping for a query file. */
   removeConnection(filePath: string): void {
+    const { primary, legacy } = this.keysFor(filePath);
     const config = this.load();
-    delete config.queries[this.relativeKey(filePath)];
+    delete config.queries[primary];
+    if (legacy) delete config.queries[legacy];
     this.save();
   }
 

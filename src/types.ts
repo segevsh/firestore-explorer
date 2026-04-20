@@ -18,7 +18,7 @@ export type ConnectionConfig = EmulatorConnection | ProductionConnection;
 
 export interface ConnectionState {
   config: ConnectionConfig;
-  status: "disconnected" | "connected" | "error";
+  status: "disconnected" | "connecting" | "connected" | "error";
   error?: string;
 }
 
@@ -67,15 +67,22 @@ export interface PaginationState {
   hasMore: boolean;
 }
 
+export interface LogEntry {
+  level: "log" | "info" | "warn" | "error" | "debug";
+  timestamp: number;
+  message: string;
+}
+
 // Messages between extension host and webview
 export type HostToWebviewMessage =
-  | { type: "loadDocuments"; documents: FirestoreDoc[]; hasMore: boolean }
-  | { type: "appendDocuments"; documents: FirestoreDoc[]; hasMore: boolean }
+  | { type: "loadDocuments"; documents: FirestoreDoc[]; hasMore: boolean; logs?: LogEntry[] }
+  | { type: "appendDocuments"; documents: FirestoreDoc[]; hasMore: boolean; logs?: LogEntry[] }
   | { type: "loadDocument"; document: FirestoreDoc }
   | { type: "saveResult"; success: boolean; error?: string }
   | { type: "queryResult"; documents: FirestoreDoc[]; hasMore: boolean }
   | { type: "error"; message: string }
-  | { type: "collections"; collections: string[] };
+  | { type: "collections"; collections: string[] }
+  | { type: "logs"; logs: LogEntry[] };
 
 export type WebviewToHostMessage =
   | { type: "fetchDocuments"; connectionName: string; collectionPath: string; limit: number }

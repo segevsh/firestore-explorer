@@ -4,6 +4,7 @@ import { CollectionView } from "./components/CollectionView";
 import { AuthView } from "./components/AuthView";
 import { QueryBuilder } from "./components/QueryBuilder";
 import { QueryResultsView } from "./components/QueryResultsView";
+import type { LogEntry } from "../../src/types";
 import "./styles/index.css";
 
 declare global {
@@ -23,6 +24,7 @@ function App() {
         <CollectionView
           connectionName={data.connectionName as string}
           initialCollectionPath={data.collectionPath as string}
+          initialLogs={(data.logs as LogEntry[]) ?? []}
         />
       );
     case "document":
@@ -39,6 +41,7 @@ function App() {
           resultType={data.resultType as "collection" | "document" | "raw"}
           documents={data.documents as any[] ?? []}
           rawOutput={data.rawOutput}
+          logs={(data.logs as LogEntry[]) ?? []}
         />
       );
     default:

@@ -119,6 +119,7 @@ export class QueryResultsPanel {
       resultType: result.resultType,
       documents: result.documents,
       rawOutput: result.rawOutput,
+      logs: result.logs ?? [],
     })};
   </script>
   <script nonce="${nonce}" src="${scriptUri}"></script>

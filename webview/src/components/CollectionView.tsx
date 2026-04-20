@@ -2,12 +2,14 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useVsCodeMessages } from "../hooks/useVsCodeMessages";
 import { TableView } from "./TableView";
 import { JsonView } from "./JsonView";
+import { LogsView } from "./LogsView";
 import { Breadcrumb } from "./Breadcrumb";
-import type { FirestoreDoc, HostToWebviewMessage } from "../../../src/types";
+import type { FirestoreDoc, HostToWebviewMessage, LogEntry } from "../../../src/types";
 
 interface CollectionViewProps {
   connectionName: string;
   initialCollectionPath: string;
+  initialLogs?: LogEntry[];
 }
 
 interface BreadcrumbSegment {
@@ -15,10 +17,11 @@ interface BreadcrumbSegment {
   path: string;
 }
 
-export function CollectionView({ connectionName, initialCollectionPath }: CollectionViewProps) {
+export function CollectionView({ connectionName, initialCollectionPath, initialLogs }: CollectionViewProps) {
   const [documents, setDocuments] = useState<FirestoreDoc[]>([]);
-  const [viewMode, setViewMode] = useState<"table" | "json">("table");
+  const [viewMode, setViewMode] = useState<"table" | "json" | "logs">("table");
   const [limit, setLimit] = useState(500);
+  const [logs, setLogs] = useState<LogEntry[]>(initialLogs ?? []);
   const [findDocId, setFindDocId] = useState("");
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -42,6 +45,9 @@ export function CollectionView({ connectionName, initialCollectionPath }: Collec
         setVisibleColumns(cols);
         setLoading(false);
         setError(null);
+        if (msg.logs && msg.logs.length > 0) {
+          setLogs((prev) => [...prev, ...msg.logs!]);
+        }
         break;
       }
       case "appendDocuments": {
@@ -57,12 +63,23 @@ export function CollectionView({ connectionName, initialCollectionPath }: Collec
         });
         setHasMore(msg.hasMore);
         setLoadingMore(false);
+        if (msg.logs && msg.logs.length > 0) {
+          setLogs((prev) => [...prev, ...msg.logs!]);
+        }
+        break;
+      }
+      case "logs": {
+        setLogs((prev) => [...prev, ...msg.logs]);
         break;
       }
       case "error": {
         setLoading(false);
         setLoadingMore(false);
         setError(msg.message);
+        setLogs((prev) => [
+          ...prev,
+          { level: "error", timestamp: Date.now(), message: msg.message },
+        ]);
         break;
       }
       case "collections": {
@@ -177,6 +194,12 @@ export function CollectionView({ connectionName, initialCollectionPath }: Collec
           >
             JSON
           </button>
+          <button
+            className={viewMode === "logs" ? "active" : ""}
+            onClick={() => setViewMode("logs")}
+          >
+            Logs{logs.length ? ` (${logs.length})` : ""}
+          </button>
         </div>
         <div className="find-by-id">
           <label>
@@ -199,7 +222,9 @@ export function CollectionView({ connectionName, initialCollectionPath }: Collec
       </div>
 
       <div className="collection-content">
-        {loading ? (
+        {viewMode === "logs" ? (
+          <LogsView logs={logs} />
+        ) : loading ? (
           <div className="loading-state">
             <div className="spinner" />
             <div className="loading-text">Loading documents…</div>
