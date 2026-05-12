@@ -1,8 +1,12 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
 import * as path from "path";
 import type { ConnectionManager } from "../services/connectionManager";
 import { FirestoreService } from "../services/firestoreService";
 import type { FirestoreFileSystemProvider } from "../providers/firestoreFileSystemProvider";
+import type { QueryConfigService } from "../services/queryConfigService";
+import { runQuery } from "../services/queryRunner";
+import { ensureQueriesInfra } from "../utils/queriesInfra";
 import type { LogEntry, WebviewToHostMessage } from "../types";
 
 function makeReadLogs(label: string, start: number, count: number, hasMore: boolean): LogEntry[] {
@@ -30,7 +34,9 @@ export class CollectionPanel {
     private connectionManager: ConnectionManager,
     private fsProvider: FirestoreFileSystemProvider,
     connectionName: string,
-    collectionPath: string
+    collectionPath: string,
+    private workspaceRoot?: string,
+    private queryConfig?: QueryConfigService
   ) {
     const db = this.connectionManager.getFirestore(connectionName);
     this.firestoreService = new FirestoreService(db);
@@ -63,9 +69,12 @@ export class CollectionPanel {
           const db = this.connectionManager.getFirestore(msg.connectionName);
           const svc = new FirestoreService(db);
           const start = Date.now();
-          const result = await svc.getDocuments(msg.collectionPath, msg.limit);
+          const result = await svc.getDocuments(msg.collectionPath, msg.limit, undefined, msg.orderBy);
+          const sortLabel = msg.orderBy?.field
+            ? ` sorted by ${msg.orderBy.field} ${msg.orderBy.direction}`
+            : "";
           const logs = makeReadLogs(
-            `Read ${msg.collectionPath} (limit ${msg.limit})`,
+            `Read ${msg.collectionPath} (limit ${msg.limit})${sortLabel}`,
             start,
             result.documents.length,
             result.hasMore
@@ -82,9 +91,12 @@ export class CollectionPanel {
           const db = this.connectionManager.getFirestore(msg.connectionName);
           const svc = new FirestoreService(db);
           const start = Date.now();
-          const result = await svc.getDocuments(msg.collectionPath, msg.limit, msg.afterDocId);
+          const result = await svc.getDocuments(msg.collectionPath, msg.limit, msg.afterDocId, msg.orderBy);
+          const sortLabel = msg.orderBy?.field
+            ? ` sorted by ${msg.orderBy.field} ${msg.orderBy.direction}`
+            : "";
           const logs = makeReadLogs(
-            `Read more ${msg.collectionPath} (limit ${msg.limit}, after ${msg.afterDocId})`,
+            `Read more ${msg.collectionPath} (limit ${msg.limit}, after ${msg.afterDocId})${sortLabel}`,
             start,
             result.documents.length,
             result.hasMore
@@ -125,11 +137,74 @@ export class CollectionPanel {
           this.panel.webview.postMessage({ type: "saveResult", success: true });
           break;
         }
+        case "openCollectionAsQuery": {
+          await this.openAsQueryFile(msg.connectionName, msg.collectionPath, msg.code);
+          break;
+        }
+        case "runQueryCode": {
+          const result = await runQuery(msg.code, msg.connectionName, this.connectionManager);
+          this.panel.webview.postMessage({
+            type: "queryCodeResult",
+            documents: result.documents,
+            hasMore: false,
+            rawOutput: result.rawOutput,
+            logs: result.logs,
+          });
+          break;
+        }
+        case "saveQueryCode": {
+          const filePath = await this.saveQueryCodeToFile(msg.connectionName, msg.collectionPath, msg.code);
+          this.panel.webview.postMessage({ type: "queryCodeSaved", filePath });
+          break;
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.panel.webview.postMessage({ type: "error", message });
     }
+  }
+
+  private async saveQueryCodeToFile(connectionName: string, collectionPath: string, code: string): Promise<string> {
+    if (!this.workspaceRoot) {
+      throw new Error("Open a workspace folder to save queries as files.");
+    }
+    const queriesDir = path.join(this.workspaceRoot, ".firestore", "queries");
+    ensureQueriesInfra(queriesDir);
+    const baseName = collectionPath.replace(/[\/\\]/g, "-").replace(/[^a-zA-Z0-9._-]/g, "_") || "query";
+    let i = 1;
+    let filePath = path.join(queriesDir, `${baseName}-${i}.js`);
+    while (fs.existsSync(filePath)) {
+      filePath = path.join(queriesDir, `${baseName}-${++i}.js`);
+    }
+    fs.writeFileSync(filePath, code, "utf-8");
+    this.queryConfig?.setConnection(filePath, connectionName);
+    return filePath;
+  }
+
+  private async openAsQueryFile(connectionName: string, collectionPath: string, code: string) {
+    if (!this.workspaceRoot) {
+      vscode.window.showWarningMessage(
+        "Open a workspace folder to save queries as files."
+      );
+      return;
+    }
+
+    const queriesDir = path.join(this.workspaceRoot, ".firestore", "queries");
+    ensureQueriesInfra(queriesDir);
+
+    const baseName = collectionPath.replace(/[\/\\]/g, "-").replace(/[^a-zA-Z0-9._-]/g, "_") || "query";
+    let i = 1;
+    let filePath = path.join(queriesDir, `${baseName}-${i}.js`);
+    while (fs.existsSync(filePath)) {
+      filePath = path.join(queriesDir, `${baseName}-${++i}.js`);
+    }
+
+    fs.writeFileSync(filePath, code, "utf-8");
+    this.queryConfig?.setConnection(filePath, connectionName);
+
+    const doc = await vscode.workspace.openTextDocument(filePath);
+    await vscode.window.showTextDocument(doc);
+    this.panel.dispose();
   }
 
   private getHtml(connectionName: string, resourceId: string, panelType: string): string {

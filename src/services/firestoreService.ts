@@ -1,5 +1,5 @@
 import type { Firestore, DocumentSnapshot } from "firebase-admin/firestore";
-import type { FirestoreDoc, QueryDef } from "../types";
+import type { FirestoreDoc, QueryDef, SortSpec } from "../types";
 
 export interface FetchResult {
   documents: FirestoreDoc[];
@@ -17,9 +17,16 @@ export class FirestoreService {
   async getDocuments(
     collectionPath: string,
     limit: number,
-    afterDocId?: string
+    afterDocId?: string,
+    orderBy?: SortSpec
   ): Promise<FetchResult> {
-    let query = this.db.collection(collectionPath).limit(limit);
+    let query: FirebaseFirestore.Query = this.db.collection(collectionPath);
+
+    if (orderBy && orderBy.field) {
+      query = query.orderBy(orderBy.field, orderBy.direction);
+    }
+
+    query = query.limit(limit);
 
     if (afterDocId) {
       const afterDoc = await this.db

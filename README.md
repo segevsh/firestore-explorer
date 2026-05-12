@@ -51,13 +51,13 @@ code --install-extension productivehub.firestore-explorer
 
 ## Connections
 
-Connections live in the `firestoreExplorer.connections` setting. You can add them through the UI or edit your workspace / user `settings.json` directly.
+Connections live in the `firestoreWorkbench.connections` setting. You can add them through the UI or edit your workspace / user `settings.json` directly.
 
 ### Emulator
 
 ```json
 {
-  "firestoreExplorer.connections": [
+  "firestoreWorkbench.connections": [
     {
       "name": "local-emulator",
       "type": "emulator",
@@ -77,7 +77,7 @@ Point `serviceAccountPath` at a Firebase service account JSON file. Relative pat
 
 ```json
 {
-  "firestoreExplorer.connections": [
+  "firestoreWorkbench.connections": [
     {
       "name": "prod",
       "type": "production",

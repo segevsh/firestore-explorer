@@ -18,6 +18,7 @@ import { runQuery } from "./services/queryRunner";
 import { QueryResultsPanel } from "./panels/queryResultsPanel";
 import { QueryConfigService } from "./services/queryConfigService";
 import { QueryConnectionCodeLensProvider, hasQueryMarker } from "./providers/queryConnectionCodeLens";
+import { ensureQueriesInfra } from "./utils/queriesInfra";
 import type { ConnectionConfig } from "./types";
 
 let connectionManager: ConnectionManager;
@@ -45,8 +46,30 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Load connections from settings (register them without connecting)
   function loadConnections() {
-    const config = vscode.workspace.getConfiguration("firestoreExplorer");
+    const config = vscode.workspace.getConfiguration("firestoreWorkbench");
     return (config.get<ConnectionConfig[]>("connections") ?? []).map(resolveConnection);
+  }
+
+  // Sync in-memory connections with the settings file: add new, remove deleted,
+  // update configs of disconnected ones.
+  async function syncConnections() {
+    const configured = loadConnections();
+    const configuredNames = new Set(configured.map((c) => c.name));
+
+    for (const state of connectionManager.getAll()) {
+      if (!configuredNames.has(state.config.name)) {
+        await connectionManager.remove(state.config.name);
+      }
+    }
+
+    for (const config of configured) {
+      const existing = connectionManager.getState(config.name);
+      if (!existing) {
+        connectionManager.register(config);
+      } else {
+        connectionManager.updateConfig(config);
+      }
+    }
   }
 
   // Query config & CodeLens
@@ -106,6 +129,18 @@ export function activate(context: vscode.ExtensionContext) {
   );
   updateQueryContext();
 
+  // Auto-sync connections when settings change (user edits settings.json directly)
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(async (e) => {
+      if (e.affectsConfiguration("firestoreWorkbench.connections")) {
+        await syncConnections();
+        connectionTreeProvider.refresh();
+        savedQueriesProvider.refresh();
+        authTreeProvider.refresh();
+      }
+    })
+  );
+
   // Watch .firestore/queries/ for file changes so tree auto-refreshes after rename
   if (workspaceRoot) {
     const queriesPattern = new vscode.RelativePattern(
@@ -155,7 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       // Save to settings
-      const vsConfig = vscode.workspace.getConfiguration("firestoreExplorer");
+      const vsConfig = vscode.workspace.getConfiguration("firestoreWorkbench");
       const connections = vsConfig.get<ConnectionConfig[]>("connections") ?? [];
       connections.push(config);
       await vsConfig.update("connections", connections, vscode.ConfigurationTarget.Workspace);
@@ -195,7 +230,7 @@ export function activate(context: vscode.ExtensionContext) {
       const name = item.connectionState.config.name;
       await connectionManager.remove(name);
 
-      const vsConfig = vscode.workspace.getConfiguration("firestoreExplorer");
+      const vsConfig = vscode.workspace.getConfiguration("firestoreWorkbench");
       const connections = (vsConfig.get<ConnectionConfig[]>("connections") ?? []).filter(
         (c) => c.name !== name
       );
@@ -209,7 +244,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "firestoreExplorer.openCollection",
       (connectionName: string, collectionPath: string) => {
-        new CollectionPanel(context, connectionManager, fsProvider, connectionName, collectionPath);
+        new CollectionPanel(context, connectionManager, fsProvider, connectionName, collectionPath, workspaceRoot, queryConfig);
       }
     ),
 
@@ -299,6 +334,7 @@ export function activate(context: vscode.ExtensionContext) {
       savedQueriesProvider.ensureQueriesDir(
         path.relative(path.join(workspaceRoot, ".firestore", "queries"), parentDir) || undefined
       );
+      ensureQueriesInfra(path.join(workspaceRoot, ".firestore", "queries"));
 
       // Auto-name: query-1.js, query-2.js, ...
       let i = 1;
@@ -446,10 +482,29 @@ return db.collection("").limit(10).get();
       authTreeProvider.refresh();
     }),
 
-    vscode.commands.registerCommand("firestoreExplorer.refreshConnections", () => {
+    vscode.commands.registerCommand("firestoreExplorer.refreshConnections", async () => {
+      await syncConnections();
       connectionTreeProvider.refresh();
       savedQueriesProvider.refresh();
       authTreeProvider.refresh();
+    }),
+
+    vscode.commands.registerCommand("firestoreExplorer.addQueryTypes", async (filePath: string) => {
+      if (!workspaceRoot) return;
+      // Ensure globals.d.ts exists
+      ensureQueriesInfra(path.join(workspaceRoot, ".firestore", "queries"));
+
+      const globalsAbs = path.join(workspaceRoot, ".firestore", "queries", "globals.d.ts");
+      const relToGlobals = path.relative(path.dirname(filePath), globalsAbs).replace(/\\/g, "/");
+      const referenceLine = `/// <reference path="${relToGlobals}" />\n`;
+
+      const doc = await vscode.workspace.openTextDocument(filePath);
+      const edit = new vscode.WorkspaceEdit();
+      edit.insert(doc.uri, new vscode.Position(0, 0), referenceLine);
+      await vscode.workspace.applyEdit(edit);
+      await doc.save();
+
+      codeLensProvider?.refresh();
     })
   );
 

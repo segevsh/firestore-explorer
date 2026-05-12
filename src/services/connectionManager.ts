@@ -53,6 +53,19 @@ export class ConnectionManager {
     }
   }
 
+  /** Update the stored config for an already-registered connection. No-op while connected/connecting. */
+  updateConfig(config: ConnectionConfig): void {
+    const state = this.states.get(config.name);
+    if (!state) {
+      this.register(config);
+      this.notify();
+      return;
+    }
+    if (state.status === "connected" || state.status === "connecting") return;
+    this.states.set(config.name, { ...state, config });
+    this.notify();
+  }
+
   isConnecting(name: string): boolean {
     return this.inflight.has(name);
   }

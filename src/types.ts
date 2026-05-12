@@ -80,18 +80,28 @@ export type HostToWebviewMessage =
   | { type: "loadDocument"; document: FirestoreDoc }
   | { type: "saveResult"; success: boolean; error?: string }
   | { type: "queryResult"; documents: FirestoreDoc[]; hasMore: boolean }
+  | { type: "queryCodeResult"; documents: FirestoreDoc[]; hasMore: boolean; rawOutput?: unknown; logs?: LogEntry[] }
+  | { type: "queryCodeSaved"; filePath: string }
   | { type: "error"; message: string }
   | { type: "collections"; collections: string[] }
   | { type: "logs"; logs: LogEntry[] };
 
+export interface SortSpec {
+  field: string;
+  direction: "asc" | "desc";
+}
+
 export type WebviewToHostMessage =
-  | { type: "fetchDocuments"; connectionName: string; collectionPath: string; limit: number }
-  | { type: "fetchMore"; connectionName: string; collectionPath: string; limit: number; afterDocId: string }
+  | { type: "fetchDocuments"; connectionName: string; collectionPath: string; limit: number; orderBy?: SortSpec }
+  | { type: "fetchMore"; connectionName: string; collectionPath: string; limit: number; afterDocId: string; orderBy?: SortSpec }
   | { type: "fetchSubCollections"; connectionName: string; docPath: string }
   | { type: "saveDocument"; connectionName: string; docPath: string; data: Record<string, unknown> }
   | { type: "runQuery"; connectionName: string; query: QueryDef }
   | { type: "openDocument"; connectionName: string; docPath: string }
   | { type: "navigateSubCollection"; connectionName: string; collectionPath: string }
+  | { type: "openCollectionAsQuery"; connectionName: string; collectionPath: string; code: string }
+  | { type: "runQueryCode"; connectionName: string; code: string }
+  | { type: "saveQueryCode"; connectionName: string; collectionPath: string; code: string }
   | { type: "fetchUsers"; connectionName: string; limit: number; pageToken?: string }
   | { type: "searchUser"; connectionName: string; query: string }
   | { type: "openUserDetail"; connectionName: string; uid: string };

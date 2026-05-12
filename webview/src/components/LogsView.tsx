@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type { LogEntry } from "../../../src/types";
 
 interface LogsViewProps {
@@ -12,6 +12,28 @@ function formatTimestamp(ts: number): string {
   const ss = String(d.getSeconds()).padStart(2, "0");
   const ms = String(d.getMilliseconds()).padStart(3, "0");
   return `${hh}:${mm}:${ss}.${ms}`;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
+  return (
+    <button
+      className={`log-copy-btn${copied ? " log-copy-btn--copied" : ""}`}
+      onClick={handleCopy}
+      title="Copy"
+    >
+      {copied ? "✓" : "⧉"}
+    </button>
+  );
 }
 
 export function LogsView({ logs }: LogsViewProps) {
@@ -30,6 +52,7 @@ export function LogsView({ logs }: LogsViewProps) {
           <span className="log-timestamp">{formatTimestamp(entry.timestamp)}</span>
           <span className="log-level">{entry.level.toUpperCase()}</span>
           <pre className="log-message">{entry.message}</pre>
+          <CopyButton text={entry.message} />
         </div>
       ))}
     </div>

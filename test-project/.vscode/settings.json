@@ -1,5 +1,5 @@
 {
-  "firestoreExplorer.connections": [
+  "firestoreWorkbench.connections": [
     {
       "name": "local-emulator",
       "type": "emulator",

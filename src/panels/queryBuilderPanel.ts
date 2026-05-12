@@ -3,6 +3,7 @@ import * as path from "path";
 import * as fs from "fs";
 import type { ConnectionManager } from "../services/connectionManager";
 import { FirestoreService } from "../services/firestoreService";
+import { ensureQueriesInfra } from "../utils/queriesInfra";
 import type { WebviewToHostMessage } from "../types";
 
 export class QueryBuilderPanel {
@@ -64,9 +65,7 @@ export class QueryBuilderPanel {
           const { name, code } = msg as any;
           if (!this.workspaceRoot || !name || !code) return;
           const queriesDir = path.join(this.workspaceRoot, ".firestore", "queries");
-          if (!fs.existsSync(queriesDir)) {
-            fs.mkdirSync(queriesDir, { recursive: true });
-          }
+          ensureQueriesInfra(queriesDir);
           const filePath = path.join(queriesDir, `${name}.js`);
           fs.writeFileSync(filePath, code, "utf-8");
           vscode.window.showInformationMessage(`Query saved: ${name}.js`);
